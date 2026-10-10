@@ -44,7 +44,7 @@
 		NSMutableDictionary *query = [NSMutableDictionary new];
 		for (NSString *pair in [url.query componentsSeparatedByString:@"&"]) {
 			NSArray *parts = [pair componentsSeparatedByString:@"="];
-			if (parts.count == 2) query[parts[0]] = [parts[1] stringByRemovingPercentEncoding];
+			if (parts.count == 2) query[parts[0]] = [parts[1] stringByRemovingPercentEncoding] ?: @"";
 		}
 		P7Settings *settings = [P7Settings shared];
 		settings.subsonicURL = query[@"url"];
