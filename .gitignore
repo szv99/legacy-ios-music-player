@@ -1,0 +1,28 @@
+# Build output
+.theos/
+packages/
+*.ipa
+*.deb
+
+# macOS
+.DS_Store
+
+# Dev screenshots (pick the ones you want for the README into docs/)
+shots/
+
+# Server state and secrets: never commit these
+server/config.json
+server/credentials.json
+server/secrets/
+server/data/
+server/cache/
+server/.venv/
+server/__pycache__/
+server/*.log
+
+# Machine-specific clangd flags
+compile_flags.txt
+
+# Unused experiments (lossless downloads via SpotiFLAC's third-party services); kept local, not published
+server/community.py
+server/spotiflac/

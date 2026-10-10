@@ -1,0 +1,6 @@
+# Required
+yt-dlp[default]
+ytmusicapi
+
+# Recommended: reads Spotify playlists with more than 100 songs without API keys
+curl_cffi

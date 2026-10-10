@@ -1,0 +1,8 @@
+secrets/
+credentials.json
+config.json
+.venv/
+data/
+cache/
+__pycache__/
+*.log

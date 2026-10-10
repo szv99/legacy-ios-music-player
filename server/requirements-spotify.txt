@@ -1,0 +1,3 @@
+# Optional: play Spotify songs from Spotify itself (needs a Spotify Premium account).
+# Log in once with: python spotify_dl.py login
+librespot
