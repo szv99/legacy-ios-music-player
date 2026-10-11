@@ -17,4 +17,6 @@ extern NSString *const P7ImageCacheDidClearNotification;
 @interface UIImageView (P7Cover)
 // Loads the cover into the image view, ignoring stale results after cell reuse.
 - (void)p7_setCoverForTrackID:(NSString *)trackID size:(NSInteger)size placeholder:(UIImage *)placeholder;
+// Shows `loading` until the cover arrives, and the placeholder if there is none.
+- (void)p7_setCoverForTrackID:(NSString *)trackID size:(NSInteger)size placeholder:(UIImage *)placeholder whileLoading:(UIImage *)loading;
 @end

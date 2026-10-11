@@ -63,7 +63,9 @@ static const NSUInteger kMaxConcurrent = 2;
 
 - (unsigned long long)limitBytes {
 	unsigned long long limit = [[[NSUserDefaults standardUserDefaults] objectForKey:kLimitKey] unsignedLongLongValue];
-	return limit ?: 1024ull * 1024 * 1024;
+	// Older versions offered sizes in binary megabytes, which Settings showed as "1.07 GB".
+	if (limit % (1024 * 1024) == 0) limit = limit / (1024 * 1024) * 1000 * 1000;
+	return limit ?: 1000ull * 1000 * 1000;
 }
 
 - (void)setLimitBytes:(unsigned long long)limitBytes {

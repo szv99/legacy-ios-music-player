@@ -42,6 +42,12 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTM
 for d in (DATA_DIR, AUDIO_DIR, COVER_DIR):
     os.makedirs(d, exist_ok=True)
 
+# Work dirs of downloads a crash or restart cut short (see download_audio, ensure_cover).
+for d in (AUDIO_DIR, COVER_DIR):
+    for name in os.listdir(d):
+        if name.startswith((".p7_", ".p7c_")):
+            shutil.rmtree(os.path.join(d, name), ignore_errors=True)
+
 
 def load_config():
     # Environment variables (handy for Docker) give the defaults; config.json overrides them.
@@ -66,6 +72,10 @@ CONFIG = load_config()
 
 class UserError(Exception):
     """Error whose message is meant for the app user."""
+
+
+class NotFound(UserError):
+    """A song, playlist, artist or cover that doesn't exist (HTTP 404)."""
 
 
 def http_get(url, headers=None, timeout=20, data=None):
@@ -226,7 +236,7 @@ def public_playlist(p, with_tracks=False, tracks=None):
     if tracks is None:
         tracks = [STORE.tracks[i] for i in p["trackIds"] if i in STORE.tracks]
     image = STORE.images.get(p["id"])  # artists and albums have their own picture
-    cover_id = p["id"] if image else (tracks[0]["id"] if tracks else None)
+    cover_id = p["id"] if image else (tracks[0]["id"] if tracks else "")  # not None: the app can't keep null in a plist
     cover_url = image or (tracks[0].get("coverUrl") or "" if tracks else "")
     out = {
         "id": p["id"],
@@ -250,7 +260,7 @@ def public_playlist(p, with_tracks=False, tracks=None):
 # Spotify
 
 
-SPOTIFY_MARKET = CONFIG.get("spotify_market") or "PL"
+SPOTIFY_MARKET = CONFIG.get("spotify_market") or "US"
 SPOTIFY_URL_RE = re.compile(r"open\.spotify\.com/(?:intl-[a-z]+/)?(playlist|album|track|user|artist)/([A-Za-z0-9._-]+)")
 
 
@@ -452,13 +462,19 @@ class Spotify:
 
     def playlist(self, pid):
         if self.has_api:
-            meta = self.api(f"/playlists/{pid}", {"fields": "name,owner(id,display_name)"})
-            items = self.paged(f"/playlists/{pid}/tracks", {"limit": 100, "additional_types": "track"})
-            tracks = [self.track_from_api(i["track"]) for i in items if i.get("track") and i["track"].get("id")]
-            playlist = {"id": f"sp-pl-{pid}", "name": meta["name"], "source": "spotify", "owner": meta["owner"].get("display_name", ""),
-                        "ownerId": meta["owner"]["id"], "url": f"https://open.spotify.com/playlist/{pid}"}
-            return playlist, tracks
-        # No API keys: anonymous pathfinder flow (full playlist, no 100-track cap)
+            try:
+                meta = self.api(f"/playlists/{pid}", {"fields": "name,owner(id,display_name)"})
+                items = self.paged(f"/playlists/{pid}/tracks", {"limit": 100, "additional_types": "track"})
+                tracks = [self.track_from_api(i["track"]) for i in items if i.get("track") and i["track"].get("id")]
+                playlist = {"id": f"sp-pl-{pid}", "name": meta["name"], "source": "spotify", "owner": meta["owner"].get("display_name", ""),
+                            "ownerId": meta["owner"]["id"], "url": f"https://open.spotify.com/playlist/{pid}"}
+                return playlist, tracks
+            except urllib.error.HTTPError as e:
+                # The Web API refuses editorial and some private playlists; the web player flow below can still read them.
+                if e.code not in (403, 404):
+                    raise
+                print(f"[spotify] Web API refused playlist {pid} (HTTP {e.code}); trying the web player", flush=True)
+        # No API keys (or refused): anonymous pathfinder flow (full playlist, no 100-track cap)
         try:
             return self.playlist_anon(pid)
         except Exception as e:
@@ -1074,7 +1090,7 @@ def fetch_collection(collection_id, fresh=False):
     elif prefix.startswith("sc-"):
         playlist, tracks = soundcloud_collection(prefix[3:5], key)
     else:
-        raise UserError("Unknown playlist.")
+        raise NotFound("Unknown playlist.")
     if len(_COLLECTIONS) > 100:
         _COLLECTIONS.clear()
     _COLLECTIONS[collection_id] = (time.time(), playlist, tracks)
@@ -1094,7 +1110,8 @@ def collection_id_for_url(url):
     if m:
         return "yt-al-" + m.group(1)
     m = YT_LIST_RE.search(url)
-    if m:
+    # watch?v=…&list=RD… is a Mix YouTube made up around that song: the song is what was shared.
+    if m and not (m.group(1).startswith("RD") and YT_VIDEO_RE.search(url)):
         return "yt-pl-" + m.group(1)
     m = YT_CHANNEL_RE.search(url)
     if m:
@@ -1154,12 +1171,18 @@ def import_url(url, fresh=False):
     raise UserError("Paste a Spotify, YouTube or SoundCloud playlist, album, artist or profile link.")
 
 
+_IMPORT_LOCK = threading.Lock()
+
+
 def start_background(job):
-    if IMPORT_STATUS["running"]:
-        raise UserError("Another import is still running.")
+    # Marked running before the thread starts, so /api/import can answer background: true
+    # and a second import right after this one is refused.
+    with _IMPORT_LOCK:
+        if IMPORT_STATUS["running"]:
+            raise UserError("Another import is still running.")
+        IMPORT_STATUS.update(running=True, message="Importing…", done=0, total=0)
 
     def run():
-        IMPORT_STATUS.update(running=True, message="Importing…", done=0, total=0)
         try:
             job()
             IMPORT_STATUS["message"] = "Import finished"
@@ -1204,7 +1227,9 @@ def import_ytmusic_library():
 
 def sync_playlist(playlist_id):
     playlist = STORE.playlists.get(playlist_id)
-    if not playlist or not playlist.get("url"):
+    if not playlist:
+        raise NotFound("Playlist not found.")
+    if not playlist.get("url"):
         raise UserError("This playlist can't be synced.")
     if playlist_id == "yt-pl-LM":
         p, tracks = ytmusic_liked()
@@ -1252,7 +1277,7 @@ def lookup_track(track_id):
     elif track_id.startswith("sc-") and track_id[3:].isdigit():
         track = track_from_soundcloud(sc_api(f"/tracks/{track_id[3:]}"))
     else:
-        raise UserError("Unknown track.")
+        raise NotFound("Unknown track.")
     STORE.upsert_tracks([track])
     return STORE.tracks[track_id]
 
@@ -1453,7 +1478,8 @@ def match_on_spotify(track):
 def download_audio(video_id, out_path, url=None):
     """YouTube video (or any yt-dlp URL, e.g. SoundCloud) -> AAC .m4a."""
     url = url or f"https://www.youtube.com/watch?v={video_id}"
-    tmpdir = tempfile.mkdtemp(prefix="p7_")
+    # Built next to the cache so the finished file is renamed into place, never copied (and never served half-written).
+    tmpdir = tempfile.mkdtemp(prefix=".p7_", dir=AUDIO_DIR)
     try:
         # YouTube sometimes answers 403 for a moment; a second attempt usually goes through.
         for attempt in range(3):
@@ -1473,7 +1499,7 @@ def download_audio(video_id, out_path, url=None):
                                "-movflags", "+faststart", tmp_out], capture_output=True, text=True, timeout=600)
         if conv.returncode != 0:
             raise UserError(f"Conversion failed: {conv.stderr.strip()[-200:]}")
-        shutil.move(tmp_out, out_path)
+        os.replace(tmp_out, out_path)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -1539,7 +1565,7 @@ def spotify_cover(spotify_id):
 
 def cover_path(item_id, size, url, wide=False):
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", item_id)
-    version = hashlib.md5(url.encode()).hexdigest()[:6]
+    version = hashlib.md5(f"{url}|2".encode()).hexdigest()[:6]  # bump the suffix to redo every cover
     return os.path.join(COVER_DIR, f"{safe}_{size}{'w' if wide else ''}_{version}.jpg")
 
 
@@ -1555,7 +1581,7 @@ def cover_url(item_id):
             first = next((STORE.tracks[i] for i in STORE.playlists[item_id]["trackIds"] if i in STORE.tracks), {})
             url = first.get("coverUrl")
         if not url:
-            raise UserError("No cover.")
+            raise NotFound("No cover.")
         return url
     track = lookup_track(item_id)
     url = track.get("coverUrl")
@@ -1565,8 +1591,20 @@ def cover_url(item_id):
             STORE.upsert_tracks([{"id": item_id, "coverUrl": url}])
             STORE.save()
     if not url or "mosaic.scdn.co" in url:
-        raise UserError("No cover.")
+        raise NotFound("No cover.")
     return url
+
+
+def _letterboxed(url, src):
+    """YouTube's 4:3 video thumbnails put 16:9 pictures between black bars (as P7LocalServer.m checks)."""
+    if "i.ytimg.com/" not in url or not url.endswith(("/hqdefault.jpg", "/sddefault.jpg", "/0.jpg")):
+        return False
+    proc = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", src, "-vf", "scale=48:36",
+                           "-f", "rawvideo", "-pix_fmt", "gray", "-"], capture_output=True, timeout=30)
+    pixels = proc.stdout
+    if proc.returncode != 0 or len(pixels) != 48 * 36:
+        return False
+    return max(pixels[:4 * 48] + pixels[-4 * 48:]) <= 24  # the bars are the top and bottom eighth
 
 
 def ensure_cover(item_id, size, wide=False):
@@ -1576,18 +1614,20 @@ def ensure_cover(item_id, size, wide=False):
     path = cover_path(item_id, size, url, wide)
     if os.path.exists(path):
         return path
-    tmpdir = tempfile.mkdtemp(prefix="p7c_")
+    tmpdir = tempfile.mkdtemp(prefix=".p7c_", dir=COVER_DIR)  # same disk as the cover, see download_audio
     try:
         src = os.path.join(tmpdir, "src")
         with open(src, "wb") as f:
             f.write(http_get(url))
         crop = "crop='min(iw,ih)':'min(iw,ih)'"
+        if _letterboxed(url, src):
+            crop = "crop=iw:iw*9/16," + crop
         scale = f"scale={size}:-2" if wide else f"{crop},scale={size}:{size}"
         proc = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-vf", scale,
                                "-q:v", "3", os.path.join(tmpdir, "out.jpg")], capture_output=True, timeout=60)
         if proc.returncode != 0:
             raise UserError("Cover conversion failed.")
-        shutil.move(os.path.join(tmpdir, "out.jpg"), path)
+        os.replace(os.path.join(tmpdir, "out.jpg"), path)
         return path
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

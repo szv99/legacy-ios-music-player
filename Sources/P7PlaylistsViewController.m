@@ -96,8 +96,12 @@ static NSString *const kPlaylistCell = @"P7PlaylistCell";
 	return [caches stringByAppendingPathComponent:@"playlists.plist"];
 }
 
+// Another source has other playlists; don't show the old ones while loading.
 - (void)settingsChanged {
 	[self updateImportButton];
+	_playlists = nil;
+	_offline = NO;
+	[self.tableView reloadData];
 	[self reload];
 }
 
@@ -125,7 +129,7 @@ static NSString *const kPlaylistCell = @"P7PlaylistCell";
 				[self hideMessage];
 				[self.tableView reloadData];
 			} else if (!self->_playlists.count) {
-				[self showMessage:[NSString stringWithFormat:@"Can't reach the server.\n%@", error.localizedDescription] retry:YES];
+				[self showMessage:P7ErrorMessage(error) retry:YES];
 			}
 			return;
 		}
@@ -173,18 +177,21 @@ static NSString *const kPlaylistCell = @"P7PlaylistCell";
 		? @"A Spotify, YouTube or SoundCloud link: playlist, album, artist, channel or profile (soundcloud.com/name/likes for liked songs)."
 		: @"A YouTube or YouTube Music link: playlist, album, channel or song.";
 	NSString *placeholder = onServer ? @"https://open.spotify.com/playlist/…" : @"https://music.youtube.com/playlist?list=…";
-	P7ActionSheet *sheet = [[P7ActionSheet alloc] initWithTitle:@"Add Playlists"];
-	[sheet addButton:@"Import from Link…" handler:^{
+	void (^prompt)(void) = ^{
 		[P7Alert promptWithTitle:@"Import from Link" message:message placeholder:placeholder confirm:@"Import" handler:^(NSString *text) {
 			NSString *url = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 			if (url.length) [self importURL:url];
 		}];
-	}];
-	if (onServer) {
-		[sheet addButton:@"Import YouTube Music Library" handler:^{
-			[self importURL:@"ytmusic:library"];
-		}];
+	};
+	if (!onServer) {
+		prompt();
+		return;
 	}
+	P7ActionSheet *sheet = [[P7ActionSheet alloc] initWithTitle:@"Add Playlists"];
+	[sheet addButton:@"Import from Link…" handler:prompt];
+	[sheet addButton:@"Import YouTube Music Library" handler:^{
+		[self importURL:@"ytmusic:library"];
+	}];
 	[sheet showFrom:self];
 }
 
@@ -205,7 +212,7 @@ static NSString *const kPlaylistCell = @"P7PlaylistCell";
 	[[P7API shared] importURL:url completion:^(P7Playlist *playlist, BOOL background, NSError *error) {
 		[self setImporting:NO];
 		if (error) {
-			[P7Alert showError:error title:@"Import Failed"];
+			[P7Alert showError:error title:@"Couldn't Import"];
 			return;
 		}
 		if (background) {
@@ -213,7 +220,11 @@ static NSString *const kPlaylistCell = @"P7PlaylistCell";
 			return;
 		}
 		[self reload];
-		if (playlist) [self.navigationController pushViewController:[[P7PlaylistViewController alloc] initWithPlaylist:playlist] animated:YES];
+		if (playlist) {
+			[self.navigationController pushViewController:[[P7PlaylistViewController alloc] initWithPlaylist:playlist] animated:YES];
+		} else {
+			[P7Alert showMessage:@"You'll find it in Songs." title:@"Song Added"];
+		}
 	}];
 }
 
@@ -234,6 +245,8 @@ static NSString *const kPlaylistCell = @"P7PlaylistCell";
 		} else if (self.tableView.tableHeaderView) {
 			[self showStatus:nil];
 			[self reload];
+			NSString *message = [status[@"message"] isKindOfClass:[NSString class]] ? status[@"message"] : nil;
+			if ([message hasPrefix:@"Import failed"]) [P7Alert showMessage:message title:@"Couldn't Import"];
 		}
 	}];
 }
@@ -256,7 +269,8 @@ static NSString *const kPlaylistCell = @"P7PlaylistCell";
 
 - (void)reloadQuietly {
 	[[P7API shared] fetchPlaylistsWithCompletion:^(NSArray *playlists, NSError *error) {
-		if (error || [[playlists valueForKey:@"raw"] isEqualToArray:[self->_playlists valueForKey:@"raw"]]) return;
+		if (error || (!self->_offline && [[playlists valueForKey:@"raw"] isEqualToArray:[self->_playlists valueForKey:@"raw"]])) return;
+		self->_offline = NO;
 		self->_playlists = playlists;
 		[self hideMessage];
 		[self.tableView reloadData];

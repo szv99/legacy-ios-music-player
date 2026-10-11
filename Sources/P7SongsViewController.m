@@ -36,7 +36,18 @@
 	self.tableView.sectionIndexBackgroundColor = [UIColor clearColor];
 	self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
 	[self enablePullToRefresh];
-	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reload) name:P7SettingsDidChangeNotification object:nil];
+	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(settingsChanged) name:P7SettingsDidChangeNotification object:nil];
+	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reload) name:P7LibraryDidChangeNotification object:nil];
+	[self reload];
+}
+
+// Another source has other songs; don't show the old ones while loading.
+- (void)settingsChanged {
+	_allTracks = nil;
+	_sections = nil;
+	_sectionTitles = nil;
+	_results = nil;
+	[self.tableView reloadData];
 	[self reload];
 }
 
@@ -54,7 +65,7 @@
 	[[P7API shared] searchTracks:nil completion:^(NSArray *tracks, NSError *error) {
 		[self endRefreshing];
 		if (error) {
-			if (!self->_allTracks.count) [self showMessage:[NSString stringWithFormat:@"Can't reach the server.\n%@", error.localizedDescription] retry:YES];
+			if (!self->_allTracks.count) [self showMessage:P7ErrorMessage(error) retry:YES];
 			return;
 		}
 		self->_allTracks = [tracks sortedArrayUsingComparator:^NSComparisonResult(P7Track *a, P7Track *b) {
@@ -170,7 +181,7 @@
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
 	if (![self isSearching] && indexPath.section == 0) {
 		UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"Shuffle"] ?: [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"Shuffle"];
-		cell.textLabel.text = [NSString stringWithFormat:@"Shuffle All (%ld)", (long)_allTracks.count];
+		cell.textLabel.text = @"Shuffle";
 		cell.textLabel.textColor = [P7Theme tintColor];
 		cell.imageView.image = [P7Theme shuffleIcon];
 		cell.imageView.tintColor = [P7Theme tintColor];

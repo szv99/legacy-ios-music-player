@@ -47,6 +47,11 @@ def compact_number(n):
     return str(n)
 
 
+def plural(count, word):
+    """'1 song', '12 songs', '1.2K followers' (count may already be text)."""
+    return f"{count} {word}" if str(count) == "1" else f"{count} {word}s"
+
+
 def entity(entity_id, kind, name, subtitle="", source="", image="", url="", replace_image=True):
     lib.STORE.set_image(entity_id, image, replace=replace_image)
     image = lib.STORE.images.get(entity_id, "")
@@ -87,7 +92,7 @@ def sp_album(a, with_artist=True):
 def sp_playlist(p):
     owner = (p.get("owner") or {}).get("display_name") or ""
     count = ((p.get("tracks") or p.get("items") or {}).get("total")) or 0
-    subtitle = " · ".join(x for x in (owner, f"{count} songs" if count else "") if x)
+    subtitle = " · ".join(x for x in (owner, plural(count, "song") if count else "") if x)
     return entity(f"sp-pl-{p['id']}", "playlist", p.get("name"), subtitle, "spotify", lib.Spotify.best_image(p.get("images")),
                   f"https://open.spotify.com/playlist/{p['id']}")
 
@@ -111,14 +116,14 @@ def yt_album(a, artist_name=""):
 def yt_playlist(p):
     list_id = p["browseId"][2:] if p["browseId"].startswith("VL") else p["browseId"]
     count = p.get("itemCount")
-    subtitle = " · ".join(str(x) for x in (p.get("author"), f"{count} songs" if count else "") if x)
+    subtitle = " · ".join(str(x) for x in (p.get("author"), plural(count, "song") if count else "") if x)
     return entity(f"yt-pl-{list_id}", "playlist", p.get("title"), subtitle, "youtube", lib.best_thumbnail(p.get("thumbnails")),
                   f"https://music.youtube.com/playlist?list={list_id}")
 
 
 def sc_artist(u, subtitle=None):
     followers = u.get("followers_count")
-    subtitle = subtitle or (f"{compact_number(followers)} followers" if followers else "Artist")
+    subtitle = subtitle or (plural(compact_number(followers), "follower") if followers else "Artist")
     return entity(f"sc-us-{u['permalink']}", "artist", u.get("username"), subtitle, "soundcloud", lib.sc_artwork(u.get("avatar_url")),
                   u.get("permalink_url") or f"https://soundcloud.com/{u['permalink']}")
 
@@ -130,7 +135,7 @@ def sc_set(p):
     owner = (p.get("user") or {}).get("username", "")
     count = p.get("track_count")
     year = (p.get("release_date") or p.get("created_at") or "")[:4] if p.get("is_album") else ""
-    subtitle = " · ".join(str(x) for x in (owner, year, f"{count} songs" if count else "") if x)
+    subtitle = " · ".join(str(x) for x in (owner, year, plural(count, "song") if count else "") if x)
     return entity(f"sc-pl-{m.group(1)}~{m.group(2)}", "album" if p.get("is_album") else "playlist", p.get("title"), subtitle, "soundcloud",
                   lib.sc_artwork(p.get("artwork_url") or (p.get("user") or {}).get("avatar_url")), p["permalink_url"])
 
@@ -174,7 +179,7 @@ def search_all(source, query):
         followers = lambda a: (a.get("followers") or {}).get("total") or 0
         found.sort(key=followers, reverse=True)
         found = [a for i, a in enumerate(found) if i == 0 or followers(a) >= max(500, followers(found[0]) * 0.05)]
-        artists = [sp_artist(a, f"{compact_number((a.get('followers') or {}).get('total'))} followers") for a in found]
+        artists = [sp_artist(a, plural(compact_number((a.get('followers') or {}).get('total')), "follower")) for a in found]
         albums = [sp_album(a) for a in _items(rest, "albums")]
         playlists = [sp_playlist(p) for p in _items(rest, "playlists")]
     elif source == "soundcloud":
@@ -213,7 +218,7 @@ def artist_page(artist_id):
     elif artist_id.startswith("sc-us-"):
         page = soundcloud_artist_page(artist_id[6:])
     else:
-        raise lib.UserError("Unknown artist.")
+        raise lib.NotFound("Unknown artist.")
     page["imported"] = artist_id in lib.STORE.playlists
     return page
 
@@ -229,7 +234,7 @@ def spotify_artist_page(aid):
 
     followers = (info.get("followers") or {}).get("total")
     genres = ", ".join(g.title() for g in (info.get("genres") or [])[:2])
-    subtitle = " · ".join(x for x in (f"{compact_number(followers)} followers" if followers else "", genres) if x)
+    subtitle = " · ".join(x for x in (plural(compact_number(followers), "follower") if followers else "", genres) if x)
     page = sp_artist(info, subtitle)
     page["bannerKey"] = page["id"]
     sections = [tracks_section("Top Songs", top)] if top else []
@@ -329,7 +334,7 @@ def soundcloud_artist_page(permalink):
         if items:
             sections.append(entities_section(title, items))
     if user.get("likes_count"):
-        likes = entity(f"sc-lk-{permalink}", "playlist", f"{user.get('username') or permalink} – Likes", f"{user['likes_count']} likes",
+        likes = entity(f"sc-lk-{permalink}", "playlist", f"{user.get('username') or permalink} – Likes", plural(user['likes_count'], "like"),
                        "soundcloud", lib.sc_artwork(user.get("avatar_url")), f"https://soundcloud.com/{permalink}/likes", replace_image=False)
         sections.append(entities_section("Likes", [likes]))
     related = [sc_artist(u) for u in results["related"] if u.get("permalink")]
@@ -337,7 +342,7 @@ def soundcloud_artist_page(permalink):
         sections.append(entities_section("Fans Also Like", related))
 
     followers, count = user.get("followers_count"), user.get("track_count")
-    subtitle = " · ".join(x for x in (f"{compact_number(followers)} followers" if followers else "", f"{count} tracks" if count else "") if x)
+    subtitle = " · ".join(x for x in (plural(compact_number(followers), "follower") if followers else "", plural(count, "track") if count else "") if x)
     page = sc_artist(user, subtitle)
     visuals = ((user.get("visuals") or {}).get("visuals") or [{}])
     banner = visuals[0].get("visual_url") if visuals else None
@@ -470,7 +475,7 @@ def collection_page(collection_id):
     if stored:
         return lib.public_playlist(stored, with_tracks=True)
     if not collection_id.startswith(lib.COLLECTION_PREFIXES):
-        raise lib.UserError("Playlist not found.")
+        raise lib.NotFound("Playlist not found.")
     playlist, tracks = lib.fetch_collection(collection_id)
     lib.STORE.upsert_tracks(tracks)
     return lib.public_playlist(playlist, with_tracks=True, tracks=[lib.STORE.tracks[t["id"]] for t in tracks])

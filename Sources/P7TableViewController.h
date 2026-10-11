@@ -2,6 +2,9 @@
 #import "P7Models.h"
 #import "P7TrackCell.h"
 
+// The text for a list that failed to load; only network failures blame the server.
+NSString *P7ErrorMessage(NSError *error);
+
 // Base for every list screen: "Now Playing" button, loading / empty / error
 // state, live refresh of track rows (playing, offline, download progress)
 // and the "…" action sheet for a track.

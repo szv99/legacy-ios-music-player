@@ -131,7 +131,13 @@ def _meta(item):
     """Artist / title / album for a reported play, preferring what the library knows."""
     track = lib.STORE.tracks.get(item.get("trackId") or "") or {}
     artist = track.get("artist") or item.get("artist") or ""
-    artist = artist.split(", ")[0].replace(" - Topic", "").strip()
+    # The main artist is the first linked one; the artist text can't be split on commas ("Tyler, The Creator").
+    # Uploads link only the uploader, so it's used only when the artist text starts with it.
+    refs = track.get("artistRefs") or item.get("artistRefs")
+    main = refs[0].get("name") if isinstance(refs, list) and refs and isinstance(refs[0], dict) else None
+    if isinstance(main, str) and main and (artist == main or artist.startswith(main + ", ")):
+        artist = main
+    artist = artist.replace(" - Topic", "").strip()
     title = track.get("title") or item.get("title") or ""
     album = track.get("album") or item.get("album") or ""
     duration = int(track.get("duration") or item.get("duration") or 0)

@@ -126,7 +126,7 @@ static NSString *P7Escape(NSString *string) {
 		if (!error && status >= 400) {
 			NSString *message = [json isKindOfClass:[NSDictionary class]] && [json[@"error"] isKindOfClass:[NSString class]]
 				? json[@"error"]
-				: [NSHTTPURLResponse localizedStringForStatusCode:status];
+				: [NSString stringWithFormat:@"The server answered with an error (%ld).", (long)status];
 			error = [self errorWithMessage:message code:status];
 		} else if (!error && !json) {
 			error = [self errorWithMessage:@"The server sent an invalid response." code:-2];

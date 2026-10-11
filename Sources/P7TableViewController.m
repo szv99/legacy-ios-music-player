@@ -34,6 +34,11 @@ static NSString *const kTrackCell = @"P7TrackCell";
 	[self updateNowPlayingButton];
 }
 
+NSString *P7ErrorMessage(NSError *error) {
+	if ([error.domain isEqualToString:NSURLErrorDomain]) return [NSString stringWithFormat:@"Can't reach the server.\n%@", error.localizedDescription];
+	return error.localizedDescription ?: @"Something went wrong.";
+}
+
 - (void)dealloc {
 	[[NSNotificationCenter defaultCenter] removeObserver:self];
 	[[NSNotificationCenter defaultCenter] removeObserver:self.tableView];
@@ -199,7 +204,7 @@ static NSString *const kTrackCell = @"P7TrackCell";
 	if (track.albumID) {
 		[sheet addButton:@"Go to Album" handler:^{ [P7Navigator openAlbumOfTrack:track from:self]; }];
 	}
-	BOOL inLibrary = track.inLibrary;
+	BOOL inLibrary = [[P7API shared] isTrackInLibrary:track];
 	[sheet addButton:inLibrary ? @"Remove from Songs" : @"Add to Songs" handler:^{
 		[[P7API shared] setTrack:track inLibrary:!inLibrary completion:^(NSError *error) {
 			if (error) [P7Alert showError:error title:inLibrary ? @"Couldn't Remove" : @"Couldn't Add"];

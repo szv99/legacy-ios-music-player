@@ -1,5 +1,26 @@
 #import "P7Models.h"
 
+// JSON nulls removed: items are saved as property lists (offline index, caches), which can't hold them.
+static id P7WithoutNulls(id value) {
+	if ([value isKindOfClass:[NSDictionary class]]) {
+		NSMutableDictionary *result = [NSMutableDictionary dictionaryWithCapacity:[value count]];
+		[value enumerateKeysAndObjectsUsingBlock:^(id key, id object, BOOL *stop) {
+			id clean = P7WithoutNulls(object);
+			if (clean) result[key] = clean;
+		}];
+		return result;
+	}
+	if ([value isKindOfClass:[NSArray class]]) {
+		NSMutableArray *result = [NSMutableArray arrayWithCapacity:[value count]];
+		for (id object in value) {
+			id clean = P7WithoutNulls(object);
+			if (clean) [result addObject:clean];
+		}
+		return result;
+	}
+	return value == [NSNull null] ? nil : value;
+}
+
 @implementation P7Item
 
 + (instancetype)itemWithDictionary:(NSDictionary *)dictionary {
@@ -19,7 +40,7 @@
 
 - (instancetype)initWithDictionary:(NSDictionary *)dictionary {
 	if ((self = [super init])) {
-		_raw = [dictionary copy];
+		_raw = [P7WithoutNulls(dictionary) copy];
 	}
 	return self;
 }

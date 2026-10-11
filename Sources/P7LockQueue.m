@@ -3,6 +3,7 @@
 #import "P7ImageCache.h"
 #import "P7API.h"
 #import "P7Downloads.h"
+#import "P7Settings.h"
 #import <UIKit/UIKit.h>
 #include <notify.h>
 
@@ -39,7 +40,7 @@ static const NSInteger kCoverSize = 120;
 
 - (BOOL)isLiked:(P7Track *)track {
 	NSNumber *override = track.trackID ? _liked[track.trackID] : nil;
-	return override ? override.boolValue : track.inLibrary;
+	return override ? override.boolValue : [[P7API shared] isTrackInLibrary:track];
 }
 
 // Love on the lock screen = add to (or take out of) Songs, the app's liked library.
@@ -69,6 +70,7 @@ static const NSInteger kCoverSize = 120;
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(runCommands) name:UIApplicationDidBecomeActiveNotification object:nil];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(stayAwakeIfPaused) name:P7PlayerDidChangeNotification object:nil];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(writePlaylists) name:P7LibraryDidChangeNotification object:nil];
+	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(writePlaylists) name:P7SettingsDidChangeNotification object:nil];
 	[self runCommands];
 	[self writePlaylists];
 	[self scheduleWrite];

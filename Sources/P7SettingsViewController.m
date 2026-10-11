@@ -31,12 +31,17 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	UITextField *_passwordField;
 	NSString *_connectionStatus;
 	BOOL _testing;
+	long long _downloadBytes;   // -1 until measured
+	long long _imageBytes;
+	BOOL _measuring;
+	BOOL _measureAgain;
 }
 
 - (instancetype)init {
 	if ((self = [super initWithStyle:UITableViewStyleGrouped])) {
 		self.title = @"Settings";
 		self.tabBarItem.image = [P7Theme tabSettingsIcon];
+		_downloadBytes = _imageBytes = -1;
 	}
 	return self;
 }
@@ -93,6 +98,7 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	[super viewWillAppear:animated];
 	[[P7Scrobbler shared] refreshStatus];
 	[self.tableView reloadData];
+	[self measureStorage];
 }
 
 - (void)storageChanged {
@@ -100,7 +106,38 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		NSMutableIndexSet *sections = [NSMutableIndexSet indexSetWithIndex:P7SettingsSectionStorage];
 		[sections addIndex:P7SettingsSectionCache];
 		[self.tableView reloadSections:sections withRowAnimation:UITableViewRowAnimationNone];
+		[self measureStorage];
 	}
+}
+
+// Adding up hundreds of files takes a moment on old iPhones, so it happens in the background.
+- (void)measureStorage {
+	if (_measuring) {
+		_measureAgain = YES;
+		return;
+	}
+	_measuring = YES;
+	dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+		long long downloads = [P7Downloads shared].totalBytes;
+		long long images = (long long)[[P7ImageCache shared] diskBytes];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			self->_measuring = NO;
+			BOOL changed = downloads != self->_downloadBytes || images != self->_imageBytes;
+			self->_downloadBytes = downloads;
+			self->_imageBytes = images;
+			if (changed && self.isViewLoaded && self.view.window) {
+				[self.tableView reloadSections:[NSIndexSet indexSetWithIndex:P7SettingsSectionStorage] withRowAnimation:UITableViewRowAnimationNone];
+			}
+			if (self->_measureAgain) {
+				self->_measureAgain = NO;
+				[self measureStorage];
+			}
+		});
+	});
+}
+
+- (NSString *)sizeText:(long long)bytes {
+	return bytes < 0 ? @"" : [NSByteCountFormatter stringFromByteCount:bytes countStyle:NSByteCountFormatterCountStyleFile];
 }
 
 - (UITextField *)textFieldWithPlaceholder:(NSString *)placeholder {
@@ -184,7 +221,13 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 }
 
 - (void)testConnection {
-	if (![P7Settings shared].isConfigured || [self backend] == P7BackendDevice) return;
+	if ([self backend] == P7BackendDevice) return;
+	if (![P7Settings shared].isConfigured) {
+		_testing = NO;
+		_connectionStatus = [self backend] == P7BackendSubsonic ? @"Enter the address and username" : @"Enter the address";
+		[self reloadConnectionStatus];
+		return;
+	}
 	_testing = YES;
 	_connectionStatus = @"Connecting…";
 	[self reloadConnectionStatus];
@@ -351,19 +394,20 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		NSString *row = [self storageRows][indexPath.row];
 		if ([row isEqualToString:@"size"]) {
 			cell.textLabel.text = @"Downloaded Music";
-			cell.detailTextLabel.text = [NSByteCountFormatter stringFromByteCount:downloads.totalBytes countStyle:NSByteCountFormatterCountStyleFile];
+			cell.detailTextLabel.text = [self sizeText:_downloadBytes];
 		} else if ([row isEqualToString:@"cancel"]) {
-			cell.textLabel.text = [NSString stringWithFormat:@"Cancel %lu Downloads", (unsigned long)downloads.activeDownloadCount];
+			NSUInteger count = downloads.activeDownloadCount;
+		cell.textLabel.text = count == 1 ? @"Cancel 1 Download" : [NSString stringWithFormat:@"Cancel %lu Downloads", (unsigned long)count];
 			cell.textLabel.textColor = [P7Theme tintColor];
 			cell.selectionStyle = UITableViewCellSelectionStyleDefault;
 		} else if ([row isEqualToString:@"images"]) {
 			cell.textLabel.text = @"Clear Image Cache";
 			cell.textLabel.textColor = [P7Theme tintColor];
-			cell.detailTextLabel.text = [NSByteCountFormatter stringFromByteCount:(long long)[[P7ImageCache shared] diskBytes] countStyle:NSByteCountFormatterCountStyleFile];
+			cell.detailTextLabel.text = [self sizeText:_imageBytes];
 			cell.selectionStyle = UITableViewCellSelectionStyleDefault;
 		} else {
 			cell.textLabel.text = @"Remove All Downloads";
-			cell.textLabel.textColor = [UIColor redColor];
+			cell.textLabel.textColor = [P7Theme destructiveColor];
 			cell.selectionStyle = UITableViewCellSelectionStyleDefault;
 		}
 	} else {
@@ -394,8 +438,8 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		}
 	} else if (indexPath.section == P7SettingsSectionCache && indexPath.row == 2) {
 		P7ActionSheet *sheet = [[P7ActionSheet alloc] initWithTitle:@"Keep up to"];
-		for (NSNumber *megabytes in @[@500, @1024, @2048, @4096, @8192]) {
-			unsigned long long bytes = megabytes.unsignedLongLongValue * 1024 * 1024;
+		for (NSNumber *megabytes in @[@500, @1000, @2000, @4000, @8000]) {
+			unsigned long long bytes = megabytes.unsignedLongLongValue * 1000 * 1000;
 			[sheet addButton:[NSByteCountFormatter stringFromByteCount:(long long)bytes countStyle:NSByteCountFormatterCountStyleFile] handler:^{
 				[P7AudioCache shared].limitBytes = bytes;
 				[self.tableView reloadData];
@@ -412,12 +456,13 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 			[downloads cancelAll];
 		} else if ([row isEqualToString:@"images"]) {
 			[[P7ImageCache shared] clearAll];
-			[self.tableView reloadData];
+			[self measureStorage];
 		} else if ([row isEqualToString:@"remove"]) {
 			[P7Alert confirmWithTitle:@"Remove All Downloads?" message:@"Downloaded playlists and songs will be deleted from this iPhone. Your library keeps them, so you can download them again." confirm:@"Remove" handler:^{
 				for (P7Playlist *playlist in [downloads savedPlaylists]) [downloads removePlaylistID:playlist.playlistID];
 				for (P7Track *track in [downloads downloadedTracks]) [downloads removeTrackID:track.trackID];
 				[self.tableView reloadData];
+				[self measureStorage];
 			}];
 		}
 	}

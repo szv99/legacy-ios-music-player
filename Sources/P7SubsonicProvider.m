@@ -795,7 +795,7 @@ static NSString *P7SSFold(NSString *string) {
 		return nil;
 	}
 	if ([action isEqualToString:@"finish"] || [action isEqualToString:@"disconnect"]) return [self scrobbleStatus];
-	if (error) *error = P7ProviderError(404, @"no such route");
+	if (error) *error = P7ProviderError(404, @"Subsonic servers can't do this.");
 	return nil;
 }
 
@@ -853,7 +853,7 @@ static NSString *P7SSFold(NSString *string) {
 		if (count == 1 && [first isEqualToString:@"prefetch"]) return @{@"ok": @YES};
 		if (count == 2 && [first isEqualToString:@"lastfm"]) return [self lastFM:parts[1] body:body ?: @{} error:error];
 	}
-	if (error) *error = P7ProviderError(404, @"no such route");
+	if (error) *error = P7ProviderError(404, @"Subsonic servers can't do this.");
 	return nil;
 }
 

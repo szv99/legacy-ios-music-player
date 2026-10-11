@@ -31,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import traceback
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -289,11 +290,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_get(parts, qs, head=method == "HEAD")
             return self._api_post(parts, self._read_json())
         except lib.UserError as e:
-            return self._err(400, str(e))
+            return self._err(404 if isinstance(e, lib.NotFound) else 400, str(e))
         except Exception as e:
-            sys.stderr.write(f"[api] {route}: {type(e).__name__}: {e}\n")
+            # Details go to the log; the app shows the error text, which would mean nothing to the user.
+            # Failed downloads (a missing cover, a site that's down) need one line, anything else the traceback.
+            detail = f"{type(e).__name__}: {e}\n" if isinstance(e, OSError) else traceback.format_exc()
+            sys.stderr.write(f"[api] {route} failed: {detail}")
             try:
-                return self._err(500, f"{type(e).__name__}: {e}")
+                return self._err(500, "Something went wrong on the server.")
             except Exception:
                 pass
 
@@ -319,6 +323,8 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 3 and parts[0] == "tracks" and parts[2] == "stream":
             return self._send_file(lib.ensure_audio(parts[1], urgent=True), "audio/mp4", head=head)
         if len(parts) == 3 and parts[0] == "tracks" and parts[2] == "cover":
+            if not q("size", "300").isdigit():
+                return self._err(400, "Bad cover size.")
             return self._send_file(lib.ensure_cover(parts[1], q("size", "300"), wide=q("wide") == "1"), "image/jpeg", head=head, cache=True)
         if len(parts) == 3 and parts[0] == "tracks" and parts[2] == "artists":
             return self._json(200, {"artists": browse.track_artists(parts[1])})
@@ -476,7 +482,10 @@ class Handler(BaseHTTPRequestHandler):
                 q = (qs.get("q") or [""])[0]
                 if not q:
                     return self._err(400, "missing q")
-                n = max(1, min(10, int((qs.get("n") or ["5"])[0])))
+                try:
+                    n = max(1, min(10, int((qs.get("n") or ["5"])[0])))
+                except ValueError:
+                    return self._err(400, "bad n")
                 return self._json(200, yt_search(q, n=n))
 
             if route == "/track":
@@ -503,9 +512,10 @@ class Handler(BaseHTTPRequestHandler):
 
             return self._err(404, "no such route")
 
-        except Exception as e:
+        except Exception:
+            sys.stderr.write(f"[http] {route} failed:\n{traceback.format_exc()}")
             try:
-                return self._err(500, f"{type(e).__name__}: {e}")
+                return self._err(500, "Something went wrong on the server.")
             except Exception:
                 pass
 

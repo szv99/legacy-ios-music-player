@@ -33,6 +33,7 @@
 	UIButton *_shuffleButton;
 	UIButton *_moreButton;
 	UIActivityIndicatorView *_bufferingView;
+	NSTimer *_clock;                    // counts the sleep timer down, also while paused
 	UIColor *_accent;
 	BOOL _scrubbing;
 	BOOL _shownPlaying;
@@ -132,7 +133,7 @@
 	_volumeView = [MPVolumeView new];
 	[self.view addSubview:_volumeView];
 
-	_repeatButton = [self modeButton:@"Repeat" action:@selector(cycleRepeat)];
+	_repeatButton = [self modeButton:@"Repeat" action:@selector(chooseRepeat)];
 	_shuffleButton = [self modeButton:@"Shuffle" action:@selector(toggleShuffle)];
 	_moreButton = [self iconButton:[P7Theme moreIcon] action:@selector(showMore)];
 	_moreButton.tintColor = dark;
@@ -148,6 +149,22 @@
 
 - (void)dealloc {
 	[[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+	[super viewWillAppear:animated];
+	[_clock invalidate];
+	_clock = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(tick) userInfo:nil repeats:YES];
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+	[super viewDidDisappear:animated];
+	[_clock invalidate];   // it keeps this controller alive otherwise
+	_clock = nil;
+}
+
+- (void)tick {
+	if ([P7Player shared].sleepDate) [self updatePositionLabel];
 }
 
 #pragma mark - Building
@@ -262,7 +279,9 @@
 			[_titleLabel.layer addAnimation:fade forKey:@"fade"];
 			[_artistLabel.layer addAnimation:fade forKey:@"fade"];
 		}
-		[_artworkView p7_setCoverForTrackID:track.coverKey size:600 placeholder:_artworkView.image ?: [P7Theme placeholderArtworkWithSize:280]];
+		// The previous cover stays until the new one is loaded, so it doesn't flash.
+		UIImage *placeholder = [P7Theme placeholderArtworkWithSize:280];
+		[_artworkView p7_setCoverForTrackID:track.coverKey size:600 placeholder:placeholder whileLoading:_artworkView.image ?: placeholder];
 	}
 	_titleLabel.text = track.title;
 	// Singles usually have the song's name as the album; don't repeat it.
@@ -274,8 +293,7 @@
 	[self setArtworkPlaying:player.isPlaying];
 
 	[self styleModeButton:_shuffleButton title:@"Shuffle" active:player.shuffle];
-	NSString *repeatTitle = player.repeatMode == P7RepeatOne ? @"Repeat 1" : @"Repeat";
-	[self styleModeButton:_repeatButton title:repeatTitle active:player.repeatMode != P7RepeatOff];
+	[self styleModeButton:_repeatButton title:@"Repeat" active:player.repeatMode != P7RepeatOff];
 	[self updateProgress];
 }
 
@@ -307,6 +325,10 @@
 	_scrubber.minimumTrackTintColor = _accent;
 	[_scrubber setThumbImage:[self scrubberThumbWithColor:_accent] forState:UIControlStateNormal];
 	_artistLabel.textColor = _accent;
+	// iOS 7 keeps drawing the "…" of a cut-off text in the old color until the text is set again.
+	NSString *artist = _artistLabel.text;
+	_artistLabel.text = nil;
+	_artistLabel.text = artist;
 	_volumeView.tintColor = _accent;
 	P7Player *player = [P7Player shared];
 	[self styleModeButton:_shuffleButton title:[_shuffleButton titleForState:UIControlStateNormal] active:player.shuffle];
@@ -358,7 +380,7 @@
 	if (track.albumID) {
 		[sheet addButton:@"Go to Album" handler:^{ [P7Navigator openAlbumOfTrack:track from:self]; }];
 	}
-	BOOL inLibrary = track.inLibrary;
+	BOOL inLibrary = [[P7API shared] isTrackInLibrary:track];
 	[sheet addButton:inLibrary ? @"Remove from Songs" : @"Add to Songs" handler:^{
 		[[P7API shared] setTrack:track inLibrary:!inLibrary completion:^(NSError *error) {
 			if (error) [P7Alert showError:error title:inLibrary ? @"Couldn't Remove" : @"Couldn't Add"];
@@ -458,9 +480,14 @@
 	player.shuffle = !player.shuffle;
 }
 
-- (void)cycleRepeat {
+// Like the iOS 7 Music app: a sheet to pick the mode.
+- (void)chooseRepeat {
 	P7Player *player = [P7Player shared];
-	player.repeatMode = (player.repeatMode + 1) % 3;
+	P7ActionSheet *sheet = [[P7ActionSheet alloc] initWithTitle:nil];
+	[sheet addButton:@"Repeat Song" handler:^{ player.repeatMode = P7RepeatOne; }];
+	[sheet addButton:@"Repeat All" handler:^{ player.repeatMode = P7RepeatAll; }];
+	if (player.repeatMode != P7RepeatOff) [sheet addButton:@"Repeat Off" handler:^{ player.repeatMode = P7RepeatOff; }];
+	[sheet showFrom:self];
 }
 
 - (void)scrubStarted {

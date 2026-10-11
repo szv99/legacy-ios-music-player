@@ -151,16 +151,20 @@ static char kCoverKey;
 @implementation UIImageView (P7Cover)
 
 - (void)p7_setCoverForTrackID:(NSString *)trackID size:(NSInteger)size placeholder:(UIImage *)placeholder {
+	[self p7_setCoverForTrackID:trackID size:size placeholder:placeholder whileLoading:placeholder];
+}
+
+- (void)p7_setCoverForTrackID:(NSString *)trackID size:(NSInteger)size placeholder:(UIImage *)placeholder whileLoading:(UIImage *)loading {
 	NSString *key = trackID.length ? [NSString stringWithFormat:@"%@_%ld", trackID, (long)size] : nil;
 	objc_setAssociatedObject(self, &kCoverKey, key, OBJC_ASSOCIATION_COPY_NONATOMIC);
 	UIImage *cached = [[P7ImageCache shared] cachedCoverForTrackID:trackID size:size];
-	self.image = cached ?: placeholder;
+	self.image = cached ?: key ? loading : placeholder;
 	if (cached || !key) return;
 	__weak UIImageView *weakSelf = self;
 	[[P7ImageCache shared] coverForTrackID:trackID size:size completion:^(UIImage *image) {
 		UIImageView *strongSelf = weakSelf;
-		if (!image || ![objc_getAssociatedObject(strongSelf, &kCoverKey) isEqualToString:key]) return;
-		strongSelf.image = image;
+		if (![objc_getAssociatedObject(strongSelf, &kCoverKey) isEqualToString:key]) return;
+		if (image || strongSelf.image != placeholder) strongSelf.image = image ?: placeholder;
 	}];
 }
 

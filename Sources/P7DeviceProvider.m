@@ -314,7 +314,7 @@ static NSString *const kCollectionPrefixes[] = {@"yt-pl-", @"yt-al-", @"yt-ch-"}
 			return nil;
 		}
 	}
-	if (error) *error = P7ProviderError(404, @"no such route");
+	if (error) *error = P7ProviderError(404, @"This isn't available on the iPhone.");
 	return nil;
 }
 

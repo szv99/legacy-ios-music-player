@@ -77,7 +77,7 @@
 		self.refreshControl.attributedTitle = nil;
 		if (error) {
 			[self endRefreshing];
-			[P7Alert showError:error title:@"Sync Failed"];
+			[P7Alert showError:error title:@"Couldn't Sync"];
 			return;
 		}
 		[self reload];
@@ -305,7 +305,21 @@
 
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
 	_filter = [searchText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+	[self filterChanged];
+}
+
+- (void)filterChanged {
 	[self.tableView reloadData];
+	if (!_filter.length || [self shownTracks].count) {
+		self.tableView.tableFooterView = [UIView new];
+		return;
+	}
+	UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, self.tableView.bounds.size.width, 80)];
+	label.text = @"No Results";
+	label.textAlignment = NSTextAlignmentCenter;
+	label.textColor = [P7Theme secondaryTextColor];
+	label.font = [UIFont systemFontOfSize:17];
+	self.tableView.tableFooterView = label;
 }
 
 - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar {
@@ -328,7 +342,7 @@
 	_filter = nil;
 	[searchBar resignFirstResponder];
 	[searchBar setShowsCancelButton:NO animated:YES];
-	[self.tableView reloadData];
+	[self filterChanged];
 }
 
 #pragma mark - Actions
@@ -373,7 +387,10 @@
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
 	NSArray *tracks = [self shownTracks];
-	return [self trackCellForTrack:tracks[MIN(indexPath.row, (NSInteger)tracks.count - 1)] number:indexPath.row + 1];
+	P7Track *track = tracks[MIN(indexPath.row, (NSInteger)tracks.count - 1)];
+	// Filtered songs keep their number in the playlist.
+	NSUInteger position = tracks == _tracks ? (NSUInteger)indexPath.row : [_tracks indexOfObjectIdenticalTo:track];
+	return [self trackCellForTrack:track number:position + 1];
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {

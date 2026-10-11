@@ -7,6 +7,7 @@
 + (UIColor *)tintColor;
 + (UIColor *)secondaryTextColor;
 + (UIColor *)separatorColor;
++ (UIColor *)destructiveColor;   // iOS 7's red
 + (void)apply;
 
 + (UIImage *)placeholderArtworkWithSize:(CGFloat)size;

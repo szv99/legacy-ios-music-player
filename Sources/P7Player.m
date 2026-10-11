@@ -4,6 +4,7 @@
 #import "P7AudioCache.h"
 #import "P7Settings.h"
 #import "P7ImageCache.h"
+#import "P7Blocks.h"
 #import <AVFoundation/AVFoundation.h>
 #import <MediaPlayer/MediaPlayer.h>
 
@@ -27,6 +28,7 @@ static void *kPlayerContext = &kPlayerContext;
 	NSUInteger _consecutiveFailures;
 	BOOL _resumeAfterInterruption;
 	NSTimer *_sleepTimer;
+	NSUInteger _sleepSetting;   // changes with every timer change, so a fade-out in progress can tell it was cancelled
 }
 
 + (instancetype)shared {
@@ -306,6 +308,7 @@ static void *kPlayerContext = &kPlayerContext;
 	[self loadArtworkForTrack:track];
 	[self prefetchUpcoming];
 	[self postChange];
+	[self saveState];   // iOS may end the app in the background without asking
 }
 
 // Ask the server to fetch the next songs now, so they start instantly.
@@ -405,6 +408,7 @@ static void *kPlayerContext = &kPlayerContext;
 #pragma mark - Sleep timer
 
 - (void)sleepAfter:(NSTimeInterval)seconds {
+	_sleepSetting++;
 	[_sleepTimer invalidate];
 	_sleepTimer = nil;
 	_sleepDate = nil;
@@ -428,10 +432,16 @@ static void *kPlayerContext = &kPlayerContext;
 	_sleepDate = nil;
 	__block NSInteger step = 0;
 	__weak P7Player *weakSelf = self;
+	NSUInteger setting = _sleepSetting;
 	void (^__block fade)(void) = nil;
 	fade = ^{
 		P7Player *player = weakSelf;
 		if (!player) return;
+		if (player->_sleepSetting != setting) {   // the timer was turned off or set again
+			player->_player.volume = 1;
+			fade = nil;
+			return;
+		}
 		step++;
 		player->_player.volume = MAX(0, 1 - step / 25.0);
 		if (step < 25) {
@@ -473,7 +483,10 @@ static void *kPlayerContext = &kPlayerContext;
 - (void)skipAfterFailure {
 	if (++_consecutiveFailures >= MIN(_queue.count, (NSUInteger)5)) {
 		_wantsToPlay = NO;
+		[self setItem:nil];   // so Play tries again
 		[self postChange];
+		NSString *title = _queue.count > 1 ? @"Couldn't Play These Songs" : @"Couldn't Play This Song";
+		[P7Alert showMessage:@"Check your connection and try again. If it keeps happening, the songs may no longer be available." title:title];
 		return;
 	}
 	[self advanceAutomatically:YES];

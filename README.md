@@ -90,7 +90,7 @@ All settings are optional. Set them as environment variables (for example in `do
 |---|---|---|
 | `token` | `PLAYER7_TOKEN` | Token the app must send. Enter the same token in the app's Settings. Set one if anyone else can reach the server. |
 | `spotify_client_id`, `spotify_client_secret` | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Spotify search and artist pages. Create an app at <https://developer.spotify.com/dashboard>. Importing Spotify playlists and albums works without them. |
-| `spotify_market` | `SPOTIFY_MARKET` | Two-letter country code used for Spotify availability. Defaults to `PL`. |
+| `spotify_market` | `SPOTIFY_MARKET` | Two-letter country code used for Spotify availability. Defaults to `US`. |
 | `lastfm_api_key`, `lastfm_api_secret` | `LASTFM_API_KEY`, `LASTFM_API_SECRET` | Last.fm scrobbling. Get a key at <https://www.last.fm/api/account/create>, then connect in the app's Settings. |
 | `youtube_proxy` | `YOUTUBE_PROXY` | Proxy for yt-dlp, if YouTube blocks the server's IP address. This happens more often on cloud servers than on home connections. |
 | | `PORT` | Port to listen on. Defaults to `8787`. |

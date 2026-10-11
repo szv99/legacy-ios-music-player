@@ -88,6 +88,13 @@ static NSString *const P7ScriptErrorDomain = @"P7ScriptErrorDomain";
 - (NSError *)errorFromException:(JSValue *)exception {
 	NSString *message = [exception isObject] && [exception[@"message"] isString] ? [exception[@"message"] toString] : [exception toString];
 	NSInteger code = [exception isObject] && [exception[@"status"] isNumber] ? [[exception[@"status"] toNumber] integerValue] : 0;
+	// The extractor's own errors (plain Error) are written for people; a TypeError and the like
+	// is a bug, usually after YouTube changed something.
+	NSString *name = [exception isObject] && [exception[@"name"] isString] ? [exception[@"name"] toString] : nil;
+	if (name && ![name isEqualToString:@"Error"]) {
+		NSLog(@"[Player7] extractor error: %@: %@", name, message);
+		message = @"YouTube answered in a way the app doesn't understand yet. Try again later.";
+	}
 	return [NSError errorWithDomain:P7ScriptErrorDomain code:code userInfo:@{NSLocalizedDescriptionKey: message.length ? message : @"The YouTube extractor failed."}];
 }
 

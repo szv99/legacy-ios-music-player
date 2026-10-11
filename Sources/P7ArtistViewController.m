@@ -125,7 +125,7 @@ static const NSInteger kCollapsedItems = 6;
 	}
 
 	BOOL imported = _artist.imported;
-	[_addButton setTitle:_importing ? @"Adding…" : imported ? @"In Library" : @"Add to Library" forState:UIControlStateNormal];
+	[_addButton setTitle:_importing ? @"Adding…" : imported ? @"In Your Library" : @"Add to Library" forState:UIControlStateNormal];
 	_addButton.enabled = !imported && !_importing && _artist != nil;
 	_addButton.layer.borderColor = (_addButton.enabled ? [P7Theme tintColor] : [P7Theme separatorColor]).CGColor;
 	_playButton.enabled = _shuffleButton.enabled = !_loadingSongs;

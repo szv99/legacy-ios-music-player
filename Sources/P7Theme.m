@@ -53,6 +53,10 @@ static void P7FillRoundedRect(CGRect rect, CGFloat radius) {
 	return [UIColor colorWithWhite:0.56 alpha:1];
 }
 
++ (UIColor *)destructiveColor {
+	return [UIColor colorWithRed:1 green:59 / 255.0 blue:48 / 255.0 alpha:1];
+}
+
 + (UIColor *)separatorColor {
 	return [UIColor colorWithRed:200 / 255.0 green:199 / 255.0 blue:204 / 255.0 alpha:1];
 }

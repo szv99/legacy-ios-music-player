@@ -44,12 +44,20 @@ static NSString *const kEntityCell = @"P7EntityCell";
 @property (nonatomic, strong) NSURLSessionDataTask *task;
 @property (nonatomic) BOOL loading;
 - (BOOL)isEmpty;
+- (void)clear;
 @end
 
 @implementation P7SearchResults
 
 - (BOOL)isEmpty {
 	return !self.tracks.count && !self.artists.count && !self.albums.count && !self.playlists.count;
+}
+
+- (void)clear {
+	self.tracks = nil;
+	self.artists = nil;
+	self.albums = nil;
+	self.playlists = nil;
 }
 
 @end
@@ -133,7 +141,7 @@ static NSString *const kEntityCell = @"P7EntityCell";
 - (void)settingsChanged {
 	for (P7SearchResults *results in _results) {
 		[results.task cancel];
-		results.tracks = nil;
+		[results clear];
 		results.query = nil;
 		results.loading = NO;
 		results.error = nil;
@@ -225,6 +233,7 @@ static NSString *const kEntityCell = @"P7EntityCell";
 		results.task = nil;
 		if (error) {
 			results.error = error;
+			[results clear];   // the message shows in place of the list
 		} else {
 			results.tracks = found[@"tracks"] ?: @[];
 			results.artists = found[@"artists"];
