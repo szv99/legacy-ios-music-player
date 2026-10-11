@@ -102,7 +102,7 @@ static NSString *P7SSFold(NSString *string) {
 	return [NSString stringWithFormat:@"u=%@&%@&v=1.13.0&c=Player7&f=json", P7SSEscape(user), credentials];
 }
 
-// params values: NSString / NSNumber, or an NSArray for a repeated key (scrobble's id and time).
+// params values: NSString / NSNumber, or an NSArray for a repeated key.
 - (NSURL *)URLForMethod:(NSString *)method params:(NSDictionary *)params {
 	NSString *server = [self serverURL];
 	if (!server.length) return nil;
@@ -750,55 +750,6 @@ static NSString *P7SSFold(NSString *string) {
 	return NO;
 }
 
-#pragma mark - Scrobbling
-
-- (NSDictionary *)scrobbleStatus {
-	return @{@"configured": @YES, @"connected": @YES, @"username": [P7Settings shared].subsonicUsername ?: @"", @"via": @"subsonic"};
-}
-
-- (NSString *)songIDForPlay:(NSDictionary *)play {
-	NSString *trackID = P7SSString(P7SSDict(play)[@"trackId"]);
-	if (![trackID hasPrefix:kTrackPrefix] || [trackID hasPrefix:kAlbumPrefix] || [trackID hasPrefix:kArtistPrefix] || [trackID hasPrefix:kPlaylistPrefix]) return nil;
-	return [trackID substringFromIndex:kTrackPrefix.length];
-}
-
-- (id)lastFM:(NSString *)action body:(NSDictionary *)body error:(NSError **)error {
-	if ([action isEqualToString:@"nowplaying"]) {
-		NSString *songID = [self songIDForPlay:body];
-		if (songID && ![self call:@"scrobble" params:@{@"id": songID, @"submission": @"false"} error:error]) return nil;
-		return @{@"ok": @YES};
-	}
-	if ([action isEqualToString:@"scrobble"]) {
-		NSMutableArray *ids = [NSMutableArray new], *times = [NSMutableArray new];
-		for (NSDictionary *play in P7SSArray(body[@"scrobbles"])) {
-			NSString *songID = [self songIDForPlay:play];
-			if (!songID) continue;   // played from another source; nothing to tell this server
-			[ids addObject:songID];
-			long long timestamp = [P7SSDict(play)[@"timestamp"] longLongValue];
-			[times addObject:@((timestamp > 0 ? timestamp : (long long)[[NSDate date] timeIntervalSince1970]) * 1000)];
-		}
-		if (ids.count && ![self call:@"scrobble" params:@{@"id": ids, @"time": times, @"submission": @"true"} error:error]) return nil;
-		return @{@"ok": @YES, @"accepted": @(ids.count)};
-	}
-	if ([action isEqualToString:@"love"]) {
-		NSString *songID = [self songIDForPlay:body];
-		if (!songID) {
-			if (error) *error = P7ProviderError(400, @"This song isn't on your Subsonic server.");
-			return nil;
-		}
-		id loved = body[@"loved"];
-		if (![self setStarred:loved ? [loved boolValue] : YES key:@"id" value:songID error:error]) return nil;
-		return @{@"ok": @YES};
-	}
-	if ([action isEqualToString:@"connect"]) {
-		if (error) *error = P7ProviderError(400, @"Scrobbling is set up on your Subsonic server, not in the app.");
-		return nil;
-	}
-	if ([action isEqualToString:@"finish"] || [action isEqualToString:@"disconnect"]) return [self scrobbleStatus];
-	if (error) *error = P7ProviderError(404, @"Subsonic servers can't do this.");
-	return nil;
-}
-
 #pragma mark - P7Provider
 
 - (id)responseForMethod:(NSString *)method parts:(NSArray *)parts query:(NSDictionary *)query body:(NSDictionary *)body error:(NSError **)error {
@@ -831,7 +782,6 @@ static NSString *P7SSFold(NSString *string) {
 		if (count == 2 && [first isEqualToString:@"import"] && [parts[1] isEqualToString:@"status"]) {
 			return @{@"running": @NO, @"message": @"", @"done": @0, @"total": @0};
 		}
-		if (count == 1 && [first isEqualToString:@"lastfm"]) return [self scrobbleStatus];
 	} else {
 		if (count == 1 && [first isEqualToString:@"import"]) return [self importLink:P7SSString(body[@"url"]) ?: @"" error:error];
 		if (count == 3 && [first isEqualToString:@"playlists"] && [parts[2] isEqualToString:@"sync"]) {
@@ -851,7 +801,6 @@ static NSString *P7SSFold(NSString *string) {
 			return [self setStarred:!remove key:@"id" value:[trackID substringFromIndex:kTrackPrefix.length] error:error] ? @{@"ok": @YES} : nil;
 		}
 		if (count == 1 && [first isEqualToString:@"prefetch"]) return @{@"ok": @YES};
-		if (count == 2 && [first isEqualToString:@"lastfm"]) return [self lastFM:parts[1] body:body ?: @{} error:error];
 	}
 	if (error) *error = P7ProviderError(404, @"Subsonic servers can't do this.");
 	return nil;

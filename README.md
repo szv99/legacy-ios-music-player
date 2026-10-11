@@ -56,7 +56,7 @@ Age-restricted videos and videos made for kids can't be played, and live streams
 
 ### Subsonic Server
 
-Works with Navidrome, Airsonic, Gonic and other Subsonic-compatible servers. Enter the server address (for example `http://192.168.1.20:4533`), your username and password, then tap **Test Connection**. Your playlists, starred albums and starred artists show up on the Playlists tab. **Love** in the Now Playing menu stars a song. Formats the iPhone can't play, such as FLAC, Ogg and Opus, are converted to MP3 by the server.
+Works with Navidrome, Airsonic, Gonic and other Subsonic-compatible servers. Enter the server address (for example `http://192.168.1.20:4533`), your username and password, then tap **Test Connection**. Your playlists, starred albums and starred artists show up on the Playlists tab. **Add to Songs** stars a song on the server. Formats the iPhone can't play, such as FLAC, Ogg and Opus, are converted to MP3 by the server.
 
 ### Player7 Server
 
@@ -70,7 +70,7 @@ Songs play from wherever they came from, so you can switch sources without break
 
 Both run on the phone itself, so they work without a server.
 
-**Last.fm.** In Settings, tap **Connect to Last.fm** and log in with your Last.fm username and password, which are sent only to Last.fm. A song counts once you've heard half of it, or 4 minutes, and plays made offline are sent later. With the Player7 Server source, the server scrobbles instead; with Subsonic, your Subsonic server does, if it's set up to.
+**Last.fm.** In Settings, tap **Connect to Last.fm** and log in with your Last.fm username and password, which are sent only to Last.fm. A song counts once you've heard half of it, or 4 minutes, and plays made offline are sent later. This works the same with every music source.
 
 **Discord.** In Settings, tap **Connect Discord**. Scan the QR code with your main phone, or go to discord.com/activate and type the code, then approve. Your Discord profile then shows the song you're playing, and the status goes away when you pause.
 
@@ -102,7 +102,6 @@ All settings are optional. Set them as environment variables (for example in `do
 | `token` | `PLAYER7_TOKEN` | Token the app must send. Enter the same token in the app's Settings. Set one if anyone else can reach the server. |
 | `spotify_client_id`, `spotify_client_secret` | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Spotify search and artist pages. Create an app at <https://developer.spotify.com/dashboard>. Importing Spotify playlists and albums works without them. |
 | `spotify_market` | `SPOTIFY_MARKET` | Two-letter country code used for Spotify availability. Defaults to `US`. |
-| `lastfm_api_key`, `lastfm_api_secret` | `LASTFM_API_KEY`, `LASTFM_API_SECRET` | Last.fm scrobbling. Get a key at <https://www.last.fm/api/account/create>, then connect in the app's Settings. |
 | `youtube_proxy` | `YOUTUBE_PROXY` | Proxy for yt-dlp, if YouTube blocks the server's IP address. This happens more often on cloud servers than on home connections. |
 | | `PORT` | Port to listen on. Defaults to `8787`. |
 
@@ -144,7 +143,7 @@ make package FINALPACKAGE=1   # release .deb in packages/
 
 `dev.sh` also builds, installs and shows logs for a phone connected over USB. Debug builds accept `player7://` URLs for scripted testing (see `Sources/P7Debug.h`); release builds ignore them.
 
-To scrobble without a server, a build needs a Last.fm API key. Create one at <https://www.last.fm/api/account/create> and put it in `local.mk`, which isn't committed:
+Scrobbling needs a Last.fm API key in the build. Create one at <https://www.last.fm/api/account/create> and put it in `local.mk`, which isn't committed:
 
 ```make
 LASTFM_API_KEY = your-api-key

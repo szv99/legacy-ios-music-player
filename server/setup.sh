@@ -29,4 +29,4 @@ python3 -m venv .venv
 
 echo
 echo "Done. Start the server with:  python3 server.py"
-echo "Optional extras are described in the README (Spotify keys, Last.fm, token)."
+echo "Optional extras are described in the README (Spotify keys, token)."

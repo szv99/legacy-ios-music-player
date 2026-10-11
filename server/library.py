@@ -57,8 +57,6 @@ def load_config():
         "spotify_client_secret": os.environ.get("SPOTIFY_CLIENT_SECRET", ""),
         "spotify_market": os.environ.get("SPOTIFY_MARKET", ""),
         "youtube_proxy": os.environ.get("YOUTUBE_PROXY", ""),
-        "lastfm_api_key": os.environ.get("LASTFM_API_KEY", ""),
-        "lastfm_api_secret": os.environ.get("LASTFM_API_SECRET", ""),
         "ytmusic_auth": os.path.join(ROOT, "secrets", "ytmusic_browser.json"),
     }
     if os.path.exists(CONFIG_PATH):
@@ -239,7 +237,7 @@ def public_track(t):
         "coverVersion": hashlib.md5((t.get("coverUrl") or "").encode()).hexdigest()[:8],
         # The original on the web, for places that fetch it themselves (the app's Discord status).
         "artworkUrl": t["coverUrl"] if (t.get("coverUrl") or "").startswith("https://") else "",
-        "mainArtist": main_artist(t),  # what scrobbles from the phone send as the artist
+        "mainArtist": main_artist(t),  # what the app scrobbles as the artist
     }
 
 

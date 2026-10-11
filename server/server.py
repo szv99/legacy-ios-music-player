@@ -46,7 +46,6 @@ os.environ["PATH"] = os.path.dirname(sys.executable) + os.pathsep + os.environ.g
 
 import library as lib
 import browse
-import lastfm
 try:
     import spotify_dl as sdl
     _HAS_LIBRESPOT = True
@@ -348,8 +347,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, result)
         if parts == ["import", "status"]:
             return self._json(200, lib.IMPORT_STATUS)
-        if parts == ["lastfm"]:
-            return self._json(200, lastfm.status())
         return self._err(404, "no such route")
 
     def _api_post(self, parts, body):
@@ -373,20 +370,6 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 lib.STORE.add_to_library(track_id)
             return self._json(200, {"ok": True})
-        if len(parts) == 2 and parts[0] == "lastfm":
-            action = parts[1]
-            if action == "connect":
-                return self._json(200, lastfm.connect())
-            if action == "finish":
-                return self._json(200, lastfm.finish())
-            if action == "disconnect":
-                return self._json(200, lastfm.disconnect())
-            if action == "nowplaying":
-                return self._json(200, lastfm.now_playing(body))
-            if action == "scrobble":
-                return self._json(200, lastfm.scrobble([i for i in body.get("scrobbles") or [] if isinstance(i, dict)]))
-            if action == "love":
-                return self._json(200, lastfm.love(body, loved=body.get("loved", True)))
         if parts == ["prefetch"]:
             lib.prefetch([i for i in body.get("ids") or [] if isinstance(i, str)])
             return self._json(200, {"ok": True})

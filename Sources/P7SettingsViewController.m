@@ -105,7 +105,6 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 
 - (void)viewWillAppear:(BOOL)animated {
 	[super viewWillAppear:animated];
-	[[P7Scrobbler shared] refreshStatus];
 	[self.tableView reloadData];
 	[self measureStorage];
 }
@@ -167,9 +166,9 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	return [P7Settings shared].backend;
 }
 
-// This iPhone scrobbles by itself, or through a Player7 server (see P7Scrobbler).
+// Scrobbling runs on the phone, so it needs a build with a Last.fm API key (see P7LastFM).
 - (BOOL)showsLastFM {
-	return [self backend] != P7BackendDevice || [P7LastFM shared].available || [P7Settings shared].serverURL.length > 0;
+	return [P7LastFM shared].available;
 }
 
 // Rows of the connection section, by backend.
@@ -301,8 +300,6 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	if (section == P7SettingsSectionLastFM) {
 		P7Scrobbler *scrobbler = [P7Scrobbler shared];
 		if (![self showsLastFM]) return nil;
-		if ([scrobbler.via isEqualToString:@"subsonic"]) return @"Plays are sent to your Subsonic server, which passes them on to Last.fm or ListenBrainz if it's set up to.";
-		if (!scrobbler.configured) return @"Add lastfm_api_key and lastfm_api_secret to the server's config.json to scrobble.";
 		if (!scrobbler.connected) return @"Scrobble the songs you play to your Last.fm profile.";
 		NSString *text = @"A song is scrobbled once you've heard half of it, or 4 minutes. Songs played offline are sent later.";
 		if (scrobbler.pendingCount) text = [text stringByAppendingFormat:@"\n%lu waiting to be sent.", (unsigned long)scrobbler.pendingCount];
@@ -363,13 +360,7 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		}
 	} else if (indexPath.section == P7SettingsSectionLastFM) {
 		P7Scrobbler *scrobbler = [P7Scrobbler shared];
-		if (!scrobbler.configured) {
-			cell.textLabel.text = @"Last.fm";
-			cell.detailTextLabel.text = @"Not set up";
-		} else if ([scrobbler.via isEqualToString:@"subsonic"] && indexPath.row == 0) {
-			cell.textLabel.text = @"Account";
-			cell.detailTextLabel.text = scrobbler.username;
-		} else if (!scrobbler.connected) {
+		if (!scrobbler.connected) {
 			cell.textLabel.text = @"Connect to Last.fm";
 			cell.textLabel.textColor = [P7Theme tintColor];
 			cell.selectionStyle = UITableViewCellSelectionStyleDefault;
@@ -460,13 +451,11 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		[self testConnection];
 	} else if (indexPath.section == P7SettingsSectionLastFM && indexPath.row == 0) {
 		P7Scrobbler *scrobbler = [P7Scrobbler shared];
-		if ([scrobbler.via isEqualToString:@"subsonic"]) {
-			// Nothing to connect: the Subsonic server handles Last.fm.
-		} else if (scrobbler.connected) {
+		if (scrobbler.connected) {
 			P7ActionSheet *sheet = [[P7ActionSheet alloc] initWithTitle:[NSString stringWithFormat:@"Scrobbling as %@", scrobbler.username]];
 			[sheet addDestructiveButton:@"Disconnect Last.fm" handler:^{ [scrobbler disconnect]; }];
 			[sheet showFrom:self];
-		} else if (scrobbler.configured) {
+		} else {
 			[scrobbler connectFrom:self];
 		}
 	} else if (indexPath.section == P7SettingsSectionDiscord && indexPath.row == 0) {

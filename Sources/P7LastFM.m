@@ -47,7 +47,7 @@ static NSString *P7MD5(NSString *string) {
 - (NSDictionary *)status {
 	NSString *username = [[NSUserDefaults standardUserDefaults] stringForKey:kUsernameKey];
 	BOOL connected = self.available && [P7Settings shared].lastFMSession.length && username.length;
-	return @{@"configured": @(self.available), @"connected": @(connected), @"username": connected ? username : @"", @"login": @"password"};
+	return @{@"configured": @(self.available), @"connected": @(connected), @"username": connected ? username : @""};
 }
 
 // A signed call; the JSON answer, or nil with *error set (Last.fm's own message when there is one).
@@ -125,7 +125,7 @@ static NSString *P7MD5(NSString *string) {
 
 - (NSDictionary *)responseForAction:(NSString *)action body:(NSDictionary *)body error:(NSError **)error {
 	if (!self.available) {
-		if (error) *error = P7ProviderError(400, @"This build has no Last.fm API key. Scrobbling needs a Player7 server.");
+		if (error) *error = P7ProviderError(400, @"This build has no Last.fm API key.");
 		return action ? nil : self.status;
 	}
 	if (!action || [action isEqualToString:@"finish"]) return self.status;

@@ -391,8 +391,7 @@
 		[sheet addButton:@"Download" handler:^{ [downloads downloadTracks:@[track]]; }];
 	}
 	if ([P7Scrobbler shared].connected) {
-		NSString *love = [[P7Scrobbler shared].via isEqualToString:@"subsonic"] ? @"Love (Star on Server)" : @"Love on Last.fm";
-		[sheet addButton:love handler:^{ [[P7Scrobbler shared] loveTrack:track]; }];
+		[sheet addButton:@"Love on Last.fm" handler:^{ [[P7Scrobbler shared] loveTrack:track]; }];
 	}
 	NSString *sleep = player.sleepDate || player.sleepAtEndOfTrack ? @"Sleep Timer (On)" : @"Sleep Timer";
 	[sheet addButton:sleep handler:^{ [self showSleepTimer]; }];

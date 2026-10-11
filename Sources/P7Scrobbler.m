@@ -1,21 +1,17 @@
 #import "P7Scrobbler.h"
-#import "P7Settings.h"
 #import "P7Player.h"
-#import "P7API.h"
 #import "P7Blocks.h"
 #import "P7LastFM.h"
 
 NSString *const P7LastFMDidChangeNotification = @"P7LastFMDidChangeNotification";
 
-static NSString *const kStatusKey = @"P7LastFMStatus";
 static NSString *const kEnabledKey = @"P7LastFMEnabled";
 static const NSUInteger kBatch = 50;
 
 @implementation P7Scrobbler {
-	NSDictionary *_status;           // {configured, connected, username} as last seen from the server
+	dispatch_queue_t _network;       // calls to Last.fm, one at a time
 	NSMutableArray *_queue;          // plays waiting to be sent
 	BOOL _flushing;
-	BOOL _awaitingAuth;              // the user went to last.fm to allow access
 
 	NSString *_trackID;              // song being followed
 	NSTimeInterval _startedAt;       // when it started playing (unix time), 0 until it does
@@ -33,9 +29,10 @@ static const NSUInteger kBatch = 50;
 
 - (instancetype)init {
 	if ((self = [super init])) {
-		_status = [[NSUserDefaults standardUserDefaults] dictionaryForKey:kStatusKey];
+		_network = dispatch_queue_create("com.szv.player7.lastfm", DISPATCH_QUEUE_SERIAL);
 		_queue = [NSMutableArray arrayWithContentsOfFile:[self queuePath]] ?: [NSMutableArray new];
 		_lastTime = -1;
+		[[NSUserDefaults standardUserDefaults] removeObjectForKey:@"P7LastFMStatus"];   // from when a server kept the account
 	}
 	return self;
 }
@@ -44,17 +41,16 @@ static const NSUInteger kBatch = 50;
 	NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
 	[nc addObserver:self selector:@selector(playerChanged) name:P7PlayerDidChangeNotification object:nil];
 	[nc addObserver:self selector:@selector(progress) name:P7PlayerProgressNotification object:nil];
-	[nc addObserver:self selector:@selector(becameActive) name:UIApplicationDidBecomeActiveNotification object:nil];
-	[nc addObserver:self selector:@selector(refreshStatus) name:P7SettingsDidChangeNotification object:nil];
-	[self refreshStatus];
+	[nc addObserver:self selector:@selector(flush) name:UIApplicationDidBecomeActiveNotification object:nil];
+	[self flush];
 }
 
 #pragma mark - State
 
-- (BOOL)configured { return [_status[@"configured"] boolValue]; }
-- (BOOL)connected { return [_status[@"connected"] boolValue]; }
-- (NSString *)username { return _status[@"username"]; }
-- (NSString *)via { return _status[@"via"]; }
+- (NSDictionary *)status { return [[P7LastFM shared] responseForAction:nil body:nil error:NULL]; }
+- (BOOL)configured { return [P7LastFM shared].available; }
+- (BOOL)connected { return [self.status[@"connected"] boolValue]; }
+- (NSString *)username { return self.status[@"username"]; }
 - (NSUInteger)pendingCount { return _queue.count; }
 
 - (BOOL)enabled {
@@ -75,50 +71,15 @@ static const NSUInteger kBatch = 50;
 	[[NSNotificationCenter defaultCenter] postNotificationName:P7LastFMDidChangeNotification object:self];
 }
 
-- (void)setStatus:(NSDictionary *)status {
-	if (![status isKindOfClass:[NSDictionary class]]) return;
-	if (!status[@"for"]) {
-		NSMutableDictionary *tagged = [status mutableCopy];
-		tagged[@"for"] = [self destination];
-		status = tagged;
-	}
-	_status = status;
-	[[NSUserDefaults standardUserDefaults] setObject:status forKey:kStatusKey];
-	[self changed];
-	[self flush];
-}
-
-// Plays go to the Player7 server with that source. This iPhone sends them to Last.fm itself
-// (P7LastFM), or through a Player7 server that's set up when this build has no Last.fm key.
-// A Subsonic server takes its own plays (through the app's server).
-- (BOOL)viaServer {
-	P7Settings *settings = [P7Settings shared];
-	if (settings.backend == P7BackendServer) return YES;
-	return settings.backend == P7BackendDevice && settings.serverURL.length && ![P7LastFM shared].available;
-}
-
-// The server that keeps the Last.fm account; another server's status doesn't apply.
-- (NSString *)destination {
-	P7Settings *settings = [P7Settings shared];
-	if ([self viaServer]) return settings.serverURL;
-	return settings.backend == P7BackendSubsonic ? settings.subsonicURL ?: @"" : @"phone";
-}
-
-- (void)refreshStatus {
-	NSString *destination = [self destination];
-	if (_status[@"for"] && ![_status[@"for"] isEqual:destination]) [self setStatus:@{@"for": destination}];
-	[[P7API shared] GET:@"/api/lastfm" parameters:nil remote:[self viaServer] completion:^(id json, NSError *error) {
-		if (!error && [destination isEqual:[self destination]]) [self setStatus:json];
-	}];
-}
-
-- (void)becameActive {
-	if (_awaitingAuth) {
-		_awaitingAuth = NO;
-		[self finishConnecting];
-		return;
-	}
-	[self flush];
+// A P7LastFM call off the main thread; the completion runs on the main thread.
+- (void)perform:(NSString *)action body:(NSDictionary *)body completion:(void (^)(NSDictionary *result, NSError *error))completion {
+	dispatch_async(_network, ^{
+		NSError *error = nil;
+		NSDictionary *result = [[P7LastFM shared] responseForAction:action body:body error:&error];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if (completion) completion(result, error);
+		});
+	});
 }
 
 #pragma mark - Following the player
@@ -179,7 +140,7 @@ static const NSUInteger kBatch = 50;
 
 - (void)sendNowPlaying:(P7Track *)track {
 	if (![self active]) return;
-	[[P7API shared] POST:@"/api/lastfm/nowplaying" body:[self playForTrack:track duration:track.duration] remote:[self viaServer] completion:^(id json, NSError *error) {}];
+	[self perform:@"nowplaying" body:[self playForTrack:track duration:track.duration] completion:nil];
 }
 
 #pragma mark - Queue
@@ -208,11 +169,11 @@ static const NSUInteger kBatch = 50;
 	if (_flushing || !_queue.count || ![self active]) return;
 	_flushing = YES;
 	NSArray *batch = [_queue subarrayWithRange:NSMakeRange(0, MIN(kBatch, _queue.count))];
-	[[P7API shared] POST:@"/api/lastfm/scrobble" body:@{@"scrobbles": batch} remote:[self viaServer] completion:^(id json, NSError *error) {
+	[self perform:@"scrobble" body:@{@"scrobbles": batch} completion:^(NSDictionary *result, NSError *error) {
 		self->_flushing = NO;
 		if (error) {
 			NSLog(@"[Player7] scrobbling failed, %lu waiting: %@", (unsigned long)self->_queue.count, error.localizedDescription);
-			if ([error.localizedDescription rangeOfString:@"isn't connected"].location != NSNotFound) [self refreshStatus];
+			if (!self.connected) [self changed];   // access was revoked on last.fm
 			return;
 		}
 		[self->_queue removeObjectsInRange:NSMakeRange(0, MIN(batch.count, self->_queue.count))];
@@ -224,71 +185,33 @@ static const NSUInteger kBatch = 50;
 
 #pragma mark - Account
 
+// Last.fm's login for apps: username and password, no web page to visit.
 - (void)connectFrom:(UIViewController *)controller {
-	if ([_status[@"login"] isEqualToString:@"password"]) {
-		// From the phone: Last.fm's mobile login, no web page to visit.
-		[P7Alert loginWithTitle:@"Connect to Last.fm" message:@"Your password goes only to Last.fm." confirm:@"Connect" handler:^(NSString *username, NSString *password) {
-			[[P7API shared] POST:@"/api/lastfm/connect" body:@{@"username": username ?: @"", @"password": password ?: @""} remote:NO completion:^(id json, NSError *error) {
-				if (error) {
-					[P7Alert showError:error title:@"Couldn't Connect"];
-					return;
-				}
-				[self setStatus:json];
-				[P7Alert showMessage:[NSString stringWithFormat:@"Scrobbling as %@.", self.username] title:@"Last.fm Connected"];
-			}];
+	[P7Alert loginWithTitle:@"Connect to Last.fm" message:@"Your password goes only to Last.fm." confirm:@"Connect" handler:^(NSString *username, NSString *password) {
+		[self perform:@"connect" body:@{@"username": username ?: @"", @"password": password ?: @""} completion:^(NSDictionary *result, NSError *error) {
+			if (error) {
+				[P7Alert showError:error title:@"Couldn't Connect"];
+				return;
+			}
+			[self changed];
+			[self flush];
+			[P7Alert showMessage:[NSString stringWithFormat:@"Scrobbling as %@.", self.username] title:@"Last.fm Connected"];
 		}];
-		return;
-	}
-	[[P7API shared] POST:@"/api/lastfm/connect" body:nil remote:[self viaServer] completion:^(id json, NSError *error) {
-		if (error) {
-			[P7Alert showError:error title:@"Couldn't Connect"];
-			return;
-		}
-		NSURL *url = [NSURL URLWithString:json[@"url"]];
-		P7ActionSheet *sheet = [[P7ActionSheet alloc] initWithTitle:@"Allow Player7 to scrobble on Last.fm, then come back here."];
-		[sheet addButton:@"Open Last.fm in Safari" handler:^{
-			self->_awaitingAuth = YES;
-			[[UIApplication sharedApplication] openURL:url];
-		}];
-		[sheet addButton:@"Copy Link (open on a computer)" handler:^{
-			[UIPasteboard generalPasteboard].string = url.absoluteString;
-			[P7Alert confirmWithTitle:@"Link Copied" message:@"Open it in a browser, allow access, then tap Done." confirm:@"Done" handler:^{
-				[self finishConnecting];
-			}];
-		}];
-		[sheet showFrom:controller];
-	}];
-}
-
-- (void)finishConnecting {
-	[[P7API shared] POST:@"/api/lastfm/finish" body:nil remote:[self viaServer] completion:^(id json, NSError *error) {
-		if (error) {
-			[P7Alert confirmWithTitle:@"Not Connected Yet" message:error.localizedDescription confirm:@"Try Again" handler:^{
-				[self finishConnecting];
-			}];
-			return;
-		}
-		[self setStatus:json];
-		[P7Alert showMessage:[NSString stringWithFormat:@"Scrobbling as %@.", self.username] title:@"Last.fm Connected"];
 	}];
 }
 
 - (void)disconnect {
-	[[P7API shared] POST:@"/api/lastfm/disconnect" body:nil remote:[self viaServer] completion:^(id json, NSError *error) {
-		if (error) {
-			[P7Alert showError:error title:@"Couldn't Disconnect"];
-			return;
-		}
+	[self perform:@"disconnect" body:nil completion:^(NSDictionary *result, NSError *error) {
 		[self->_queue removeAllObjects];
 		[self saveQueue];
-		[self setStatus:json];
+		[self changed];
 	}];
 }
 
 - (void)loveTrack:(P7Track *)track {
 	NSMutableDictionary *body = [[self playForTrack:track duration:track.duration] mutableCopy];
 	body[@"loved"] = @YES;
-	[[P7API shared] POST:@"/api/lastfm/love" body:body remote:[self viaServer] completion:^(id json, NSError *error) {
+	[self perform:@"love" body:body completion:^(NSDictionary *result, NSError *error) {
 		if (error) [P7Alert showError:error title:@"Couldn't Love"];
 	}];
 }

@@ -12,9 +12,6 @@ services:
       SPOTIFY_CLIENT_ID: ""
       SPOTIFY_CLIENT_SECRET: ""
       SPOTIFY_MARKET: "US"
-      # Optional. Scrobbling (https://www.last.fm/api/account/create).
-      LASTFM_API_KEY: ""
-      LASTFM_API_SECRET: ""
       # Optional. Route yt-dlp through a proxy if YouTube blocks your server's IP.
       YOUTUBE_PROXY: ""
     volumes:
