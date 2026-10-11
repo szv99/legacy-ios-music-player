@@ -1275,16 +1275,32 @@ def spotify_audio_available():
 # librespot's session is a single connection: concurrent downloads break it ("Bad file descriptor").
 _SPOTIFY_LOCK = threading.Lock()
 
+# librespot has no timeouts: on a dead connection a download waits forever, and every later
+# Spotify song would queue up behind it. A download that stops growing for this long is abandoned.
+_SPOTIFY_STALL_SECONDS = 20
 
-def _reset_spotify_session():
-    with _sdl._session_lock:
-        old = _sdl._session
-        _sdl._session = None
-    try:
-        if old is not None:
-            old.close()
-    except Exception:
-        pass
+
+def _download_ogg_watched(spotify_id, ogg):
+    failure = []
+
+    def run():
+        try:
+            _sdl.download_ogg(spotify_id, ogg)
+        except Exception as e:
+            failure.append(e)
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    size, stalled = -1, 0
+    while worker.is_alive():
+        worker.join(1)
+        current = os.path.getsize(ogg) if os.path.exists(ogg) else 0
+        stalled = stalled + 1 if current == size else 0
+        size = current
+        if stalled >= _SPOTIFY_STALL_SECONDS:
+            raise RuntimeError("librespot stopped responding")
+    if failure:
+        raise failure[0]
 
 
 def _download_ogg(spotify_id, ogg):
@@ -1292,7 +1308,7 @@ def _download_ogg(spotify_id, ogg):
     with _SPOTIFY_LOCK:
         for attempt in range(2):
             try:
-                _sdl.download_ogg(spotify_id, ogg)
+                _download_ogg_watched(spotify_id, ogg)
                 if os.path.getsize(ogg) > 10000:
                     return
                 raise RuntimeError("empty download")
@@ -1301,7 +1317,9 @@ def _download_ogg(spotify_id, ogg):
                 if "alternative track" in message or attempt == 1:
                     raise  # not available on Spotify for this account/region
                 print(f"[audio] librespot error ({message}); reconnecting", flush=True)
-                _reset_spotify_session()
+                _sdl.reset_session()
+                if os.path.exists(ogg):
+                    os.remove(ogg)  # an abandoned download may still be writing to the old file
 
 
 def _encode_aac(src, out_path, coder):

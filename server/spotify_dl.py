@@ -78,6 +78,27 @@ def _get_session() -> Session:
         return _session
 
 
+def reset_session():
+    """Drop the session so the next call logs in again.
+
+    librespot has no timeouts: after a failed reconnect, calls wait forever while holding the
+    session and its lock. So this doesn't wait for either; it swaps in a new lock and closes
+    the old session in the background.
+    """
+    global _session, _session_lock
+    old, _session = _session, None
+    _session_lock = threading.Lock()
+    if old is not None:
+        threading.Thread(target=_close_quietly, args=(old,), daemon=True).start()
+
+
+def _close_quietly(session):
+    try:
+        session.close()
+    except Exception:
+        pass
+
+
 def download_ogg(spotify_id: str, out_path: str, prefer_premium: bool = True) -> str:
     """Stream raw Ogg Vorbis for the given track to out_path. Returns the path."""
     sess = _get_session()
