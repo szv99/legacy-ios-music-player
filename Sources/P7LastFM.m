@@ -103,15 +103,17 @@ static NSString *P7MD5(NSString *string) {
 	return json;
 }
 
-// Artist, track, album and duration for a play, or nil without an artist. The library's
-// linked artists tell which part of "A, B" is the main artist ("Tyler, The Creator" stays whole).
+// Artist, track, album and duration for a play, or nil without an artist. Only the main
+// artist is sent, like Spotify does: "A" for "A, B" (the song's mainArtist, see P7LocalLibrary).
 - (NSDictionary *)metadataFor:(NSDictionary *)play {
 	if (![play isKindOfClass:[NSDictionary class]]) return nil;
-	NSDictionary *known = [play[@"trackId"] isKindOfClass:[NSString class]] ? [[P7LocalLibrary shared] trackForID:play[@"trackId"]] : nil;
 	NSString *artist = [play[@"artist"] isKindOfClass:[NSString class]] ? play[@"artist"] : @"";
-	NSDictionary *main = [known[@"artistRefs"] isKindOfClass:[NSArray class]] ? [known[@"artistRefs"] firstObject] : nil;
-	NSString *mainName = [main isKindOfClass:[NSDictionary class]] && [main[@"name"] isKindOfClass:[NSString class]] ? main[@"name"] : nil;
-	if (mainName.length && ([artist isEqualToString:mainName] || [artist hasPrefix:[mainName stringByAppendingString:@", "]])) artist = mainName;
+	NSString *main = [play[@"mainArtist"] isKindOfClass:[NSString class]] ? play[@"mainArtist"] : nil;
+	if (!main.length && [play[@"trackId"] isKindOfClass:[NSString class]]) {
+		NSDictionary *known = [[P7LocalLibrary shared] trackForID:play[@"trackId"]];
+		if (known) main = [[P7LocalLibrary shared] publicTrack:known][@"mainArtist"];
+	}
+	if (main.length && [artist hasPrefix:main]) artist = main;
 	artist = [[artist stringByReplacingOccurrencesOfString:@" - Topic" withString:@""] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
 	NSString *title = [play[@"title"] isKindOfClass:[NSString class]] ? play[@"title"] : @"";
 	if (!artist.length || [artist isEqualToString:@"Unknown Artist"] || !title.length) return nil;

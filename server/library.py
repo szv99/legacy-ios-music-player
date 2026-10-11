@@ -211,6 +211,15 @@ def album_entity_id(t):
     return f"yt-al-{album_id}" if album_id.startswith("MPREb") else f"sp-al-{album_id}"
 
 
+def main_artist(t):
+    """The first linked artist when the artist text starts with it: "A" for "A, B", but never
+    half of "Tyler, The Creator". Empty when unknown."""
+    refs = t.get("artistRefs")
+    name = refs[0].get("name") if isinstance(refs, list) and refs and isinstance(refs[0], dict) else None
+    artist = t.get("artist") or ""
+    return name if isinstance(name, str) and name and (artist == name or artist.startswith(name + ", ")) else ""
+
+
 def public_track(t):
     return {
         "id": t["id"],
@@ -230,6 +239,7 @@ def public_track(t):
         "coverVersion": hashlib.md5((t.get("coverUrl") or "").encode()).hexdigest()[:8],
         # The original on the web, for places that fetch it themselves (the app's Discord status).
         "artworkUrl": t["coverUrl"] if (t.get("coverUrl") or "").startswith("https://") else "",
+        "mainArtist": main_artist(t),  # what scrobbles from the phone send as the artist
     }
 
 

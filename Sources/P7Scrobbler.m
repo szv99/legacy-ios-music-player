@@ -171,6 +171,7 @@ static const NSUInteger kBatch = 50;
 		@"trackId": track.trackID ?: @"",
 		@"title": track.title ?: @"",
 		@"artist": track.artist ?: @"",
+		@"mainArtist": [track stringForKey:@"mainArtist"] ?: @"",
 		@"album": track.album ?: @"",
 		@"duration": @((NSInteger)duration),
 	};

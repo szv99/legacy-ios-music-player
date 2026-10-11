@@ -222,6 +222,15 @@ static BOOL P7IsEmpty(id value) {
 	return [albumID hasPrefix:@"yt-al-"] ? albumID : [@"yt-al-" stringByAppendingString:albumID];
 }
 
+// The first linked artist when the artist text starts with it: "A" for "A, B", but never half
+// of "Tyler, The Creator". Empty when unknown. Same as main_artist in server/library.py.
+- (NSString *)mainArtistOf:(NSDictionary *)track {
+	NSDictionary *first = [track[@"artistRefs"] isKindOfClass:[NSArray class]] ? [track[@"artistRefs"] firstObject] : nil;
+	NSString *name = [first isKindOfClass:[NSDictionary class]] && [first[@"name"] isKindOfClass:[NSString class]] ? first[@"name"] : nil;
+	NSString *artist = [track[@"artist"] isKindOfClass:[NSString class]] ? track[@"artist"] : @"";
+	return name.length && ([artist isEqualToString:name] || [artist hasPrefix:[name stringByAppendingString:@", "]]) ? name : @"";
+}
+
 - (NSDictionary *)publicTrack:(NSDictionary *)track {
 	NSString *trackID = track[@"id"];
 	return @{
@@ -239,6 +248,7 @@ static BOOL P7IsEmpty(id value) {
 		@"albumId": [self albumEntityID:track],
 		@"coverVersion": P7ShortHash(P7IsEmpty(track[@"coverUrl"]) ? @"" : track[@"coverUrl"]),
 		@"artworkUrl": [track[@"coverUrl"] isKindOfClass:[NSString class]] && [track[@"coverUrl"] hasPrefix:@"https://"] ? track[@"coverUrl"] : @"",
+		@"mainArtist": [self mainArtistOf:track],
 	};
 }
 
