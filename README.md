@@ -1,8 +1,10 @@
 # Player7
 
-A music player for old iPhones, modeled on the iOS 7 Music app. It plays YouTube Music and YouTube directly on the phone, with no account or server needed. It can also play from a Subsonic server such as Navidrome, or from its own optional self-hosted server, which adds Spotify and SoundCloud.
+The iOS 7 Music app, brought back to life on old iPhones.
 
-It runs on legacy iOS, from iOS 7.1 through iOS 10, where the official YouTube and Spotify apps no longer work.
+Player7 turns an old iPhone into an iPod again. It looks and feels like the Music app from 2013, but it plays today's music: all of YouTube Music and YouTube, streamed and saved for offline right on the phone, with no account, server or computer needed. Point it at a Subsonic server for your own collection, or at the optional Player7 server for Spotify and SoundCloud.
+
+It runs on legacy iOS, from iOS 7.1 through iOS 10, on phones the official YouTube and Spotify apps dropped years ago.
 
 <p align="center">
   <img src="docs/screenshots/search.png" width="250" alt="Searching YouTube Music">
@@ -12,21 +14,21 @@ It runs on legacy iOS, from iOS 7.1 through iOS 10, where the official YouTube a
 <p align="center">
   <img src="docs/screenshots/artist.png" width="250" alt="An artist page">
   <img src="docs/screenshots/videos.png" width="250" alt="Searching YouTube videos">
-  <img src="docs/screenshots/settings.png" width="250" alt="Settings">
+  <img src="docs/screenshots/discord.png" width="250" alt="Connecting Discord with a QR code">
 </p>
 
 Screenshots from an iPhone 5c on iOS 7.1.2.
 
 ## Features
 
-- Search YouTube Music for songs, artists, albums and playlists, or search YouTube for any video
-- Import YouTube albums, playlists and channels into a library kept on the phone
-- Download songs for offline listening; songs you play are also cached automatically
-- Up Next queue, shuffle, repeat and a sleep timer
-- Lock screen, Control Center and AirPlay controls
-- Show what you're playing on your Discord profile, linked by scanning a QR code
-- Play your own music from a Subsonic server
-- Optional companion server that adds Spotify, SoundCloud and Last.fm
+- Search YouTube Music for songs, artists, albums and playlists, or plain YouTube for live sets, mixes and everything else
+- Keep a library on the phone: import albums, playlists and channels from a link
+- Every song you play is saved for offline listening, and whole playlists download with one tap
+- Up Next, shuffle, repeat and a sleep timer, with lock screen, Control Center and AirPlay controls
+- Scrobble to Last.fm straight from the phone
+- Show what you're listening to on your Discord profile, with the cover and a progress bar; you link your account by scanning a QR code
+- Play your own collection from Navidrome or any other Subsonic server
+- Add Spotify and SoundCloud with an optional server you run yourself
 
 ## Requirements
 
@@ -58,11 +60,19 @@ Works with Navidrome, Airsonic, Gonic and other Subsonic-compatible servers. Ent
 
 ### Player7 Server
 
-The server in `server/` adds Spotify and SoundCloud search and imports, imports of whole Spotify profiles, your YouTube Music library, and Last.fm scrobbling. It runs on anything with Docker or Python, such as a Mac, a Linux machine, a Raspberry Pi or a NAS. See [Running the server](#running-the-server).
+The server in `server/` adds Spotify and SoundCloud search and imports, imports of whole Spotify profiles and your YouTube Music library. It runs on anything with Docker or Python, such as a Mac, a Linux machine, a Raspberry Pi or a NAS. See [Running the server](#running-the-server).
 
 YouTube is still searched and played by the phone itself, since YouTube often blocks servers, especially ones in data centers. To let the server handle YouTube with yt-dlp instead, turn on **YouTube via Server** in Settings.
 
-Songs play from wherever they came from, so you can switch sources without breaking the queue: Spotify and SoundCloud songs keep playing from the server after you switch to **This iPhone**, and Last.fm scrobbling keeps going through the server too.
+Songs play from wherever they came from, so you can switch sources without breaking the queue: Spotify and SoundCloud songs keep playing from the server after you switch to **This iPhone**.
+
+## Last.fm and Discord
+
+Both run on the phone itself, so they work without a server.
+
+**Last.fm.** In Settings, tap **Connect to Last.fm** and log in with your Last.fm username and password, which are sent only to Last.fm. A song counts once you've heard half of it, or 4 minutes, and plays made offline are sent later. With the Player7 Server source, the server scrobbles instead; with Subsonic, your Subsonic server does, if it's set up to.
+
+**Discord.** In Settings, tap **Connect Discord**. Scan the QR code with your main phone, or go to discord.com/activate and type the code, then approve. Your Discord profile then shows the song you're playing, and the status goes away when you pause.
 
 ## Running the server
 
@@ -112,6 +122,8 @@ The app runs a small HTTP server on `127.0.0.1` that implements the same API as 
 
 YouTube serves audio as fragmented MP4, which the media player on iOS 7 to 9 can't open. The built-in server rebuilds the file's index and passes the player a regular MP4. The audio data is copied unchanged, without re-encoding, and seeking and downloads work as usual.
 
+Last.fm and Discord are contacted straight from the phone. discord.com only accepts encryption that iOS 7 doesn't support, so Player7 talks to gaming-sdk.com, the address Discord's Social SDK uses for game consoles, which still does.
+
 The YouTube code lives in `Resources/extractor.js` and runs in JavaScriptCore. Since YouTube changes often, the app can download a newer version of this file without being reinstalled (see [Building](#building)).
 
 ## Troubleshooting
@@ -131,6 +143,15 @@ make package FINALPACKAGE=1   # release .deb in packages/
 ```
 
 `dev.sh` also builds, installs and shows logs for a phone connected over USB. Debug builds accept `player7://` URLs for scripted testing (see `Sources/P7Debug.h`); release builds ignore them.
+
+To scrobble without a server, a build needs a Last.fm API key. Create one at <https://www.last.fm/api/account/create> and put it in `local.mk`, which isn't committed:
+
+```make
+LASTFM_API_KEY = your-api-key
+LASTFM_API_SECRET = your-shared-secret
+```
+
+The Discord status uses the Discord application set in `kP7DiscordApplicationID` in `Sources/P7Discord.m`. Forks should create their own at <https://discord.com/developers/applications>, turn on **Public Client** under OAuth2 and enable the Social SDK.
 
 Before publishing a build, set `kP7ExtractorUpdateURL` in `Sources/P7Script.m` to the raw URL of `Resources/extractor.js` in your repository. To ship a fix later, edit `extractor.js`, increase `extractor.version`, and push. Installed apps check for a new version once a day.
 
