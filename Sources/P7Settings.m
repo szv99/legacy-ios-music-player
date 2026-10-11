@@ -13,6 +13,7 @@ static NSString *const kKeychainService = @"com.szv.player7";
 static NSString *const kTokenAccount = @"token";
 static NSString *const kSubsonicPasswordAccount = @"subsonic-password";
 static NSString *const kDiscordAccount = @"discord-refresh-token";
+static NSString *const kLastFMAccount = @"lastfm-session";
 
 @implementation P7Settings
 
@@ -131,6 +132,16 @@ static NSString *const kDiscordAccount = @"discord-refresh-token";
 // Discord hands out a new refresh token with every access token, so this changes often.
 - (void)setDiscordRefreshToken:(NSString *)discordRefreshToken {
 	[self setKeychainString:discordRefreshToken forAccount:kDiscordAccount];
+}
+
+#pragma mark - Last.fm
+
+- (NSString *)lastFMSession {
+	return [self keychainStringForAccount:kLastFMAccount];
+}
+
+- (void)setLastFMSession:(NSString *)lastFMSession {
+	[self setKeychainString:lastFMSession forAccount:kLastFMAccount];
 }
 
 #pragma mark - Keychain

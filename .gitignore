@@ -20,6 +20,9 @@ server/.venv/
 server/__pycache__/
 server/*.log
 
+# Build settings with secrets (Last.fm API key), see the Makefile
+local.mk
+
 # Machine-specific clangd flags
 compile_flags.txt
 

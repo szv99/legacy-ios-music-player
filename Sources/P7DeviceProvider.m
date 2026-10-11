@@ -1,6 +1,7 @@
 #import "P7DeviceProvider.h"
 #import "P7LocalLibrary.h"
 #import "P7Script.h"
+#import "P7LastFM.h"
 
 static NSString *const kCollectionPrefixes[] = {@"yt-pl-", @"yt-al-", @"yt-ch-"};
 
@@ -275,7 +276,7 @@ static NSString *const kCollectionPrefixes[] = {@"yt-pl-", @"yt-al-", @"yt-ch-"}
 			return [self search:query[@"q"] ?: @"" videos:[query[@"source"] isEqualToString:@"youtube-videos"] full:[query[@"full"] isEqualToString:@"1"] error:error];
 		}
 		if ([parts isEqualToArray:@[@"import", @"status"]]) return @{@"running": @NO, @"message": @"", @"done": @0, @"total": @0};
-		if ([parts isEqualToArray:@[@"lastfm"]]) return @{@"configured": @NO, @"connected": @NO};
+		if ([parts isEqualToArray:@[@"lastfm"]]) return [[P7LastFM shared] responseForAction:nil body:nil error:NULL];
 		if (parts.count == 2 && [first isEqualToString:@"artists"]) {
 			NSDictionary *artist = [self artistPage:parts[1] error:error];
 			return artist ? @{@"artist": artist} : nil;
@@ -309,10 +310,7 @@ static NSString *const kCollectionPrefixes[] = {@"yt-pl-", @"yt-al-", @"yt-ch-"}
 			[self prefetchTrackIDs:[self array:body[@"ids"]]];
 			return @{@"ok": @YES};
 		}
-		if ([first isEqualToString:@"lastfm"]) {
-			if (error) *error = P7ProviderError(400, @"Last.fm scrobbling needs a Player7 or Subsonic server.");
-			return nil;
-		}
+		if (parts.count == 2 && [first isEqualToString:@"lastfm"]) return [[P7LastFM shared] responseForAction:parts[1] body:body error:error];
 	}
 	if (error) *error = P7ProviderError(404, @"This isn't available on the iPhone.");
 	return nil;

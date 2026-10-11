@@ -70,6 +70,18 @@
 	[alert present];
 }
 
++ (void)loginWithTitle:(NSString *)title message:(NSString *)message confirm:(NSString *)confirm handler:(void (^)(NSString *, NSString *))handler {
+	P7Alert *alert = [[P7Alert alloc] initWithTitle:title message:message delegate:nil cancelButtonTitle:@"Cancel" otherButtonTitles:confirm, nil];
+	alert.delegate = alert;
+	alert.alertViewStyle = UIAlertViewStyleLoginAndPasswordInput;
+	UITextField *field = [alert textFieldAtIndex:0];
+	field.placeholder = @"Username";
+	field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+	field.autocorrectionType = UITextAutocorrectionTypeNo;
+	alert.confirmHandler = ^(P7Alert *a) { handler([a textFieldAtIndex:0].text, [a textFieldAtIndex:1].text); };
+	[alert present];
+}
+
 + (void)confirmWithTitle:(NSString *)title message:(NSString *)message confirm:(NSString *)confirm handler:(void (^)(void))handler {
 	P7Alert *alert = [[P7Alert alloc] initWithTitle:title message:message delegate:nil cancelButtonTitle:@"Cancel" otherButtonTitles:confirm, nil];
 	alert.delegate = alert;

@@ -21,6 +21,14 @@ Player7_CODESIGN_FLAGS = -Sentitlements.plist
 JSC_INCLUDE = $(THEOS_PROJECT_DIR)/.theos/include
 Player7_CFLAGS += -I$(JSC_INCLUDE) -Wno-expansion-to-defined
 
+# Last.fm API key for scrobbling straight from the phone (create one at last.fm/api/account/create).
+# Put LASTFM_API_KEY and LASTFM_API_SECRET in local.mk, which isn't committed, or pass them to make.
+# Without them, scrobbling needs a Player7 server. Run make clean after changing them.
+-include local.mk
+ifneq ($(LASTFM_API_KEY),)
+Player7_CFLAGS += -DP7_LASTFM_API_KEY='"$(LASTFM_API_KEY)"' -DP7_LASTFM_API_SECRET='"$(LASTFM_API_SECRET)"'
+endif
+
 include $(THEOS_MAKE_PATH)/application.mk
 
 before-all::

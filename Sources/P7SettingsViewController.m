@@ -10,6 +10,7 @@
 #import "P7Scrobbler.h"
 #import "P7Script.h"
 #import "P7Discord.h"
+#import "P7LastFM.h"
 #import "P7DiscordLinkViewController.h"
 
 typedef NS_ENUM(NSInteger, P7SettingsSection) {
@@ -166,9 +167,9 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	return [P7Settings shared].backend;
 }
 
-// This iPhone scrobbles through a Player7 server when one is set up (see P7Scrobbler).
+// This iPhone scrobbles by itself, or through a Player7 server (see P7Scrobbler).
 - (BOOL)showsLastFM {
-	return [self backend] != P7BackendDevice || [P7Settings shared].serverURL.length > 0;
+	return [self backend] != P7BackendDevice || [P7LastFM shared].available || [P7Settings shared].serverURL.length > 0;
 }
 
 // Rows of the connection section, by backend.

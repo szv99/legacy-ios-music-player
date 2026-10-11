@@ -14,5 +14,7 @@
 + (void)showMessage:(NSString *)message title:(NSString *)title;
 // Single text field prompt; handler receives the text when confirmed.
 + (void)promptWithTitle:(NSString *)title message:(NSString *)message placeholder:(NSString *)placeholder confirm:(NSString *)confirm handler:(void (^)(NSString *text))handler;
+// Username and password; handler receives both when confirmed.
++ (void)loginWithTitle:(NSString *)title message:(NSString *)message confirm:(NSString *)confirm handler:(void (^)(NSString *username, NSString *password))handler;
 + (void)confirmWithTitle:(NSString *)title message:(NSString *)message confirm:(NSString *)confirm handler:(void (^)(void))handler;
 @end

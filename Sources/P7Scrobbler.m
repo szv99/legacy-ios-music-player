@@ -3,6 +3,7 @@
 #import "P7Player.h"
 #import "P7API.h"
 #import "P7Blocks.h"
+#import "P7LastFM.h"
 
 NSString *const P7LastFMDidChangeNotification = @"P7LastFMDidChangeNotification";
 
@@ -87,11 +88,13 @@ static const NSUInteger kBatch = 50;
 	[self flush];
 }
 
-// Plays go to the Player7 server whenever one is set up, also while playing from This iPhone.
+// Plays go to the Player7 server with that source. This iPhone sends them to Last.fm itself
+// (P7LastFM), or through a Player7 server that's set up when this build has no Last.fm key.
 // A Subsonic server takes its own plays (through the app's server).
 - (BOOL)viaServer {
 	P7Settings *settings = [P7Settings shared];
-	return settings.serverURL.length && settings.backend != P7BackendSubsonic;
+	if (settings.backend == P7BackendServer) return YES;
+	return settings.backend == P7BackendDevice && settings.serverURL.length && ![P7LastFM shared].available;
 }
 
 // The server that keeps the Last.fm account; another server's status doesn't apply.
@@ -221,6 +224,20 @@ static const NSUInteger kBatch = 50;
 #pragma mark - Account
 
 - (void)connectFrom:(UIViewController *)controller {
+	if ([_status[@"login"] isEqualToString:@"password"]) {
+		// From the phone: Last.fm's mobile login, no web page to visit.
+		[P7Alert loginWithTitle:@"Connect to Last.fm" message:@"Your password goes only to Last.fm." confirm:@"Connect" handler:^(NSString *username, NSString *password) {
+			[[P7API shared] POST:@"/api/lastfm/connect" body:@{@"username": username ?: @"", @"password": password ?: @""} remote:NO completion:^(id json, NSError *error) {
+				if (error) {
+					[P7Alert showError:error title:@"Couldn't Connect"];
+					return;
+				}
+				[self setStatus:json];
+				[P7Alert showMessage:[NSString stringWithFormat:@"Scrobbling as %@.", self.username] title:@"Last.fm Connected"];
+			}];
+		}];
+		return;
+	}
 	[[P7API shared] POST:@"/api/lastfm/connect" body:nil remote:[self viaServer] completion:^(id json, NSError *error) {
 		if (error) {
 			[P7Alert showError:error title:@"Couldn't Connect"];

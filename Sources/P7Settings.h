@@ -21,5 +21,6 @@ typedef NS_ENUM(NSInteger, P7Backend) {
 @property (nonatomic, readonly) BOOL isConfigured;
 @property (nonatomic) BOOL savePlayedSongs;        // played songs go straight to Offline (default YES)
 @property (nonatomic, copy) NSString *discordRefreshToken; // stored in the keychain; changes don't notify
+@property (nonatomic, copy) NSString *lastFMSession;       // Last.fm session key for scrobbling from the phone (keychain)
 + (NSString *)normalizedURL:(NSString *)string;    // trims, drops trailing slashes, adds http://
 @end
