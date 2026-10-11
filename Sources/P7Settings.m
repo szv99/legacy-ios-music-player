@@ -12,6 +12,7 @@ static NSString *const kSavePlayedSongsKey = @"P7SavePlayedSongs";
 static NSString *const kKeychainService = @"com.szv.player7";
 static NSString *const kTokenAccount = @"token";
 static NSString *const kSubsonicPasswordAccount = @"subsonic-password";
+static NSString *const kDiscordAccount = @"discord-refresh-token";
 
 @implementation P7Settings
 
@@ -119,6 +120,17 @@ static NSString *const kSubsonicPasswordAccount = @"subsonic-password";
 - (void)setSubsonicPassword:(NSString *)subsonicPassword {
 	[self setKeychainString:subsonicPassword forAccount:kSubsonicPasswordAccount];
 	[self changed];
+}
+
+#pragma mark - Discord
+
+- (NSString *)discordRefreshToken {
+	return [self keychainStringForAccount:kDiscordAccount];
+}
+
+// Discord hands out a new refresh token with every access token, so this changes often.
+- (void)setDiscordRefreshToken:(NSString *)discordRefreshToken {
+	[self setKeychainString:discordRefreshToken forAccount:kDiscordAccount];
 }
 
 #pragma mark - Keychain

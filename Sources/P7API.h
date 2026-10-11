@@ -14,6 +14,7 @@ typedef void (^P7JSONCompletion)(id json, NSError *error);
 //   GET  /api/playlists                 -> { playlists: [Playlist] }
 //   GET  /api/playlists/<id>            -> { playlist: Playlist (with tracks) }
 //   GET  /api/tracks?q=<query>          -> { tracks: [Track] }
+//   GET  /api/tracks/<id>               -> { track } (Player7 server only)
 //   GET  /api/tracks/<id>/stream        -> audio, supports Range
 //   GET  /api/tracks/<id>/cover?size=N  -> jpeg/png
 //   GET  /api/search?q=&source=&full=1  -> { tracks, artists, albums, playlists } (source: spotify | youtube | soundcloud | subsonic | youtube-videos)

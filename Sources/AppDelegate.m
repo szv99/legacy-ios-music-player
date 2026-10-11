@@ -11,6 +11,7 @@
 #import "P7Debug.h"
 #import "P7MiniPlayer.h"
 #import "P7Scrobbler.h"
+#import "P7Discord.h"
 #import "P7LockQueue.h"
 #import "P7LocalServer.h"
 #import "P7LocalLibrary.h"
@@ -24,6 +25,7 @@
 	[[P7Player shared] setUp];
 	[P7Downloads shared];
 	[[P7Scrobbler shared] start];
+	[[P7Discord shared] start];
 	[P7LockQueue start];
 
 	NSMutableArray *tabs = [NSMutableArray new];

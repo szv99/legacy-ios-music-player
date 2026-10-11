@@ -24,6 +24,7 @@ Screenshots from an iPhone 5c on iOS 7.1.2.
 - Download songs for offline listening; songs you play are also cached automatically
 - Up Next queue, shuffle, repeat and a sleep timer
 - Lock screen, Control Center and AirPlay controls
+- Show what you're playing on your Discord profile, linked by scanning a QR code
 - Play your own music from a Subsonic server
 - Optional companion server that adds Spotify, SoundCloud and Last.fm
 

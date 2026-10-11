@@ -9,11 +9,14 @@
 #import "P7AudioCache.h"
 #import "P7Scrobbler.h"
 #import "P7Script.h"
+#import "P7Discord.h"
+#import "P7DiscordLinkViewController.h"
 
 typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	P7SettingsSectionSource,
 	P7SettingsSectionConnection,
 	P7SettingsSectionLastFM,
+	P7SettingsSectionDiscord,
 	P7SettingsSectionCache,
 	P7SettingsSectionStorage,
 	P7SettingsSectionAbout,
@@ -82,12 +85,17 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(storageChanged) name:P7DownloadsDidChangeNotification object:nil];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(storageChanged) name:P7AudioCacheDidChangeNotification object:nil];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(lastFMChanged) name:P7LastFMDidChangeNotification object:nil];
+	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(discordChanged) name:P7DiscordDidChangeNotification object:nil];
 }
 
 - (void)lastFMChanged {
 	if (self.isViewLoaded && self.view.window) {
 		[self.tableView reloadSections:[NSIndexSet indexSetWithIndex:P7SettingsSectionLastFM] withRowAnimation:UITableViewRowAnimationNone];
 	}
+}
+
+- (void)discordChanged {
+	if (self.isViewLoaded) [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:P7SettingsSectionDiscord] withRowAnimation:UITableViewRowAnimationNone];
 }
 
 - (void)dealloc {
@@ -260,6 +268,9 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		case P7SettingsSectionLastFM:
 			if (![self showsLastFM]) return 0;
 			return [P7Scrobbler shared].connected ? 2 : 1;
+		case P7SettingsSectionDiscord:
+			if (![P7Discord shared].available) return 0;
+			return [P7Discord shared].connected ? 2 : 1;
 		case P7SettingsSectionCache: return [P7Settings shared].savePlayedSongs ? 1 : 4;
 		case P7SettingsSectionStorage: return [P7Downloads shared].activeDownloadCount ? 4 : 3;
 		default: return 1;
@@ -271,6 +282,7 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		case P7SettingsSectionSource: return @"Music Source";
 		case P7SettingsSectionConnection: return @[@"This iPhone", @"Player7 Server", @"Subsonic Server"][[self backend]];
 		case P7SettingsSectionLastFM: return [self showsLastFM] ? @"Last.fm" : nil;
+		case P7SettingsSectionDiscord: return [P7Discord shared].available ? @"Discord" : nil;
 		case P7SettingsSectionCache: return @"Played Songs";
 		case P7SettingsSectionStorage: return @"Offline Storage";
 		default: return nil;
@@ -294,6 +306,9 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		NSString *text = @"A song is scrobbled once you've heard half of it, or 4 minutes. Songs played offline are sent later.";
 		if (scrobbler.pendingCount) text = [text stringByAppendingFormat:@"\n%lu waiting to be sent.", (unsigned long)scrobbler.pendingCount];
 		return text;
+	}
+	if (section == P7SettingsSectionDiscord && [P7Discord shared].available) {
+		return @"Shows the song you're playing on your Discord profile, with its cover. It goes away when you pause.";
 	}
 	if (section == P7SettingsSectionCache) {
 		return [P7Settings shared].savePlayedSongs
@@ -368,6 +383,23 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 			[toggle addTarget:self action:@selector(scrobbleChanged:) forControlEvents:UIControlEventValueChanged];
 			cell.accessoryView = toggle;
 		}
+	} else if (indexPath.section == P7SettingsSectionDiscord) {
+		P7Discord *discord = [P7Discord shared];
+		if (!discord.connected) {
+			cell.textLabel.text = @"Connect Discord";
+			cell.textLabel.textColor = [P7Theme tintColor];
+			cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+		} else if (indexPath.row == 0) {
+			cell.textLabel.text = @"Account";
+			cell.detailTextLabel.text = discord.username;
+			cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+		} else {
+			cell.textLabel.text = @"Show What I'm Playing";
+			UISwitch *toggle = [UISwitch new];
+			toggle.on = discord.enabled;
+			[toggle addTarget:self action:@selector(discordChangedSwitch:) forControlEvents:UIControlEventValueChanged];
+			cell.accessoryView = toggle;
+		}
 	} else if (indexPath.section == P7SettingsSectionCache && indexPath.row == 0) {
 		cell.textLabel.text = @"Save to Offline";
 		UISwitch *toggle = [UISwitch new];
@@ -436,6 +468,16 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		} else if (scrobbler.configured) {
 			[scrobbler connectFrom:self];
 		}
+	} else if (indexPath.section == P7SettingsSectionDiscord && indexPath.row == 0) {
+		P7Discord *discord = [P7Discord shared];
+		if (!discord.connected) {
+			UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:[P7DiscordLinkViewController new]];
+			[self presentViewController:nav animated:YES completion:nil];
+		} else {
+			P7ActionSheet *sheet = [[P7ActionSheet alloc] initWithTitle:[NSString stringWithFormat:@"Connected as %@", discord.username]];
+			[sheet addDestructiveButton:@"Disconnect Discord" handler:^{ [discord disconnect]; }];
+			[sheet showFrom:self];
+		}
 	} else if (indexPath.section == P7SettingsSectionCache && indexPath.row == 2) {
 		P7ActionSheet *sheet = [[P7ActionSheet alloc] initWithTitle:@"Keep up to"];
 		for (NSNumber *megabytes in @[@500, @1000, @2000, @4000, @8000]) {
@@ -470,6 +512,10 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 
 - (void)scrobbleChanged:(UISwitch *)toggle {
 	[P7Scrobbler shared].enabled = toggle.on;
+}
+
+- (void)discordChangedSwitch:(UISwitch *)toggle {
+	[P7Discord shared].enabled = toggle.on;
 }
 
 - (void)youtubeOnServerChanged:(UISwitch *)toggle {

@@ -14,6 +14,7 @@ Player7 app API (library.py), every call takes ?token= when a token is configure
   POST /api/playlists/<id>/sync                -> re-import from Spotify/YouTube
   POST /api/playlists/<id>/delete
   GET  /api/tracks[?q=]                        -> {tracks: [...]} library songs
+  GET  /api/tracks/<id>                        -> {track}
   GET  /api/tracks/<id>/stream                 -> cached AAC .m4a, supports Range
   GET  /api/tracks/<id>/cover?size=N           -> square jpeg
   GET  /api/search?q=&source=spotify|youtube   -> {tracks: [...]}
@@ -320,6 +321,8 @@ class Handler(BaseHTTPRequestHandler):
             if query:
                 tracks = [t for t in tracks if query in f"{t.get('title', '')} {t.get('artist', '')} {t.get('album', '')}".lower()]
             return self._json(200, {"tracks": [lib.public_track(t) for t in tracks]})
+        if len(parts) == 2 and parts[0] == "tracks":
+            return self._json(200, {"track": lib.public_track(lib.lookup_track(parts[1]))})
         if len(parts) == 3 and parts[0] == "tracks" and parts[2] == "stream":
             return self._send_file(lib.ensure_audio(parts[1], urgent=True), "audio/mp4", head=head)
         if len(parts) == 3 and parts[0] == "tracks" and parts[2] == "cover":

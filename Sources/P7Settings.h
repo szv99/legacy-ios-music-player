@@ -20,5 +20,6 @@ typedef NS_ENUM(NSInteger, P7Backend) {
 @property (nonatomic, copy) NSString *subsonicPassword; // stored in the keychain
 @property (nonatomic, readonly) BOOL isConfigured;
 @property (nonatomic) BOOL savePlayedSongs;        // played songs go straight to Offline (default YES)
+@property (nonatomic, copy) NSString *discordRefreshToken; // stored in the keychain; changes don't notify
 + (NSString *)normalizedURL:(NSString *)string;    // trims, drops trailing slashes, adds http://
 @end

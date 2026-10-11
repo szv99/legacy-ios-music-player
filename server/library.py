@@ -228,6 +228,8 @@ def public_track(t):
         "albumId": album_entity_id(t),
         # Changes whenever the cover source changes, so the app knows to drop its cached copy.
         "coverVersion": hashlib.md5((t.get("coverUrl") or "").encode()).hexdigest()[:8],
+        # The original on the web, for places that fetch it themselves (the app's Discord status).
+        "artworkUrl": t["coverUrl"] if (t.get("coverUrl") or "").startswith("https://") else "",
     }
 
 

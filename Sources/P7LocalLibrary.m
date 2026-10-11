@@ -238,6 +238,7 @@ static BOOL P7IsEmpty(id value) {
 		@"inLibrary": @([self isAdded:trackID]),
 		@"albumId": [self albumEntityID:track],
 		@"coverVersion": P7ShortHash(P7IsEmpty(track[@"coverUrl"]) ? @"" : track[@"coverUrl"]),
+		@"artworkUrl": [track[@"coverUrl"] isKindOfClass:[NSString class]] && [track[@"coverUrl"] hasPrefix:@"https://"] ? track[@"coverUrl"] : @"",
 	};
 }
 
