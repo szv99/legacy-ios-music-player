@@ -2,6 +2,7 @@
 #import "P7Settings.h"
 #import "P7Downloads.h"
 #import "P7LocalServer.h"
+#import "P7LocalLibrary.h"
 
 NSString *const P7APIErrorDomain = @"P7APIErrorDomain";
 NSString *const P7LibraryDidChangeNotification = @"P7LibraryDidChangeNotification";
@@ -17,6 +18,7 @@ static NSString *P7Escape(NSString *string) {
 
 @implementation P7API {
 	NSURLSession *_session;
+	NSMutableDictionary *_inLibrary;   // track id -> @YES / @NO set since the track was loaded
 }
 
 + (instancetype)shared {
@@ -33,17 +35,17 @@ static NSString *P7Escape(NSString *string) {
 		configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
 		configuration.HTTPMaximumConnectionsPerHost = 4;
 		_session = [NSURLSession sessionWithConfiguration:configuration];
+		_inLibrary = [NSMutableDictionary new];
 	}
 	return self;
 }
 
 #pragma mark - URLs
 
-// A Player7 server, or the app's own server on 127.0.0.1 for the other backends (see P7LocalServer.h).
-- (NSURL *)URLForPath:(NSString *)path parameters:(NSDictionary *)parameters {
+// A Player7 server (remote), or the app's own server on 127.0.0.1 (see P7LocalServer.h).
+- (NSURL *)URLForPath:(NSString *)path parameters:(NSDictionary *)parameters remote:(BOOL)remote {
 	P7Settings *settings = [P7Settings shared];
-	if (!settings.isConfigured) return nil;
-	BOOL remote = settings.backend == P7BackendServer;
+	if (!remote && settings.backend == P7BackendSubsonic && !settings.isConfigured) return nil;
 	NSString *base = remote ? settings.serverURL : [P7LocalServer shared].baseURL;
 	if (!base.length) return nil;
 
@@ -62,17 +64,46 @@ static NSString *P7Escape(NSString *string) {
 	return [NSURL URLWithString:string];
 }
 
+- (NSURL *)URLForPath:(NSString *)path parameters:(NSDictionary *)parameters {
+	return [self URLForPath:path parameters:parameters remote:[self usesServer]];
+}
+
+- (BOOL)usesServer {
+	return [P7Settings shared].backend == P7BackendServer;
+}
+
+// YouTube is searched and played on the phone, also with a Player7 server, unless Settings
+// hand it to the server.
+- (BOOL)youtubeOnPhone {
+	P7Settings *settings = [P7Settings shared];
+	return settings.backend != P7BackendServer || !settings.youtubeOnServer;
+}
+
+// Songs and pages are answered by whoever can: YouTube by the phone (see above), Subsonic by
+// the app's server, and Spotify and SoundCloud by the Player7 server, whichever source is
+// selected. So a queue keeps playing after switching sources.
+- (BOOL)serverHandlesItem:(NSString *)itemID {
+	P7Settings *settings = [P7Settings shared];
+	if (!settings.serverURL.length || [itemID hasPrefix:@"ss-"]) return NO;
+	return [itemID hasPrefix:@"yt-"] ? ![self youtubeOnPhone] : YES;
+}
+
 - (NSURL *)streamURLForTrack:(P7Track *)track {
-	return [self URLForPath:[NSString stringWithFormat:@"/api/tracks/%@/stream", P7Escape(track.trackID)] parameters:nil];
+	NSString *path = [NSString stringWithFormat:@"/api/tracks/%@/stream", P7Escape(track.trackID)];
+	return [self URLForPath:path parameters:nil remote:[self serverHandlesItem:track.trackID]];
 }
 
 - (NSURL *)coverURLForTrackID:(NSString *)coverKey size:(NSInteger)size {
 	if (!coverKey.length) return nil;
 	NSArray *parts = [coverKey componentsSeparatedByString:@"|"];
+	NSString *itemID = parts[0];
 	NSMutableDictionary *parameters = [@{@"size": @(size)} mutableCopy];
 	if (parts.count > 1 && [parts[1] length]) parameters[@"v"] = parts[1];
 	if (parts.count > 2 && [parts[2] isEqualToString:@"wide"]) parameters[@"wide"] = @"1";
-	return [self URLForPath:[NSString stringWithFormat:@"/api/tracks/%@/cover", P7Escape(parts[0])] parameters:parameters];
+	// The server's own YouTube songs: the phone would have to look each one up just for its cover.
+	BOOL remote = [self serverHandlesItem:itemID]
+		|| ([self usesServer] && [itemID hasPrefix:@"yt-"] && ![[P7LocalLibrary shared] knowsID:itemID]);
+	return [self URLForPath:[NSString stringWithFormat:@"/api/tracks/%@/cover", P7Escape(itemID)] parameters:parameters remote:remote];
 }
 
 #pragma mark - Requests
@@ -110,12 +141,20 @@ static NSString *P7Escape(NSString *string) {
 }
 
 - (NSURLSessionDataTask *)GET:(NSString *)path parameters:(NSDictionary *)parameters completion:(P7JSONCompletion)completion {
-	NSURL *url = [self URLForPath:path parameters:parameters];
+	return [self GET:path parameters:parameters remote:[self usesServer] completion:completion];
+}
+
+- (NSURLSessionDataTask *)GET:(NSString *)path parameters:(NSDictionary *)parameters remote:(BOOL)remote completion:(P7JSONCompletion)completion {
+	NSURL *url = [self URLForPath:path parameters:parameters remote:remote];
 	return [self sendRequest:url ? [NSURLRequest requestWithURL:url] : [NSURLRequest new] completion:completion];
 }
 
 - (NSURLSessionDataTask *)POST:(NSString *)path body:(NSDictionary *)body completion:(P7JSONCompletion)completion {
-	NSURL *url = [self URLForPath:path parameters:nil];
+	return [self POST:path body:body remote:[self usesServer] completion:completion];
+}
+
+- (NSURLSessionDataTask *)POST:(NSString *)path body:(NSDictionary *)body remote:(BOOL)remote completion:(P7JSONCompletion)completion {
+	NSURL *url = [self URLForPath:path parameters:nil remote:remote];
 	NSMutableURLRequest *request = url ? [NSMutableURLRequest requestWithURL:url] : [NSMutableURLRequest new];
 	request.HTTPMethod = @"POST";
 	request.timeoutInterval = 120;
@@ -156,7 +195,11 @@ static NSString *P7Escape(NSString *string) {
 }
 
 - (NSURLSessionDataTask *)search:(NSString *)query source:(NSString *)source completion:(void (^)(NSDictionary *, NSError *))completion {
-	return [self GET:@"/api/search" parameters:@{@"q": query ?: @"", @"source": source ?: @"youtube", @"full": @"1"} completion:^(id json, NSError *error) {
+	source = source ?: @"youtube";
+	// The server has no video search; YouTube Music follows the YouTube setting.
+	BOOL onPhone = [source isEqualToString:@"youtube-videos"] || ([source isEqualToString:@"youtube"] && [self youtubeOnPhone]);
+	NSDictionary *parameters = @{@"q": query ?: @"", @"source": source, @"full": @"1"};
+	return [self GET:@"/api/search" parameters:parameters remote:[self usesServer] && !onPhone completion:^(id json, NSError *error) {
 		if (error) {
 			completion(nil, error);
 			return;
@@ -172,21 +215,21 @@ static NSString *P7Escape(NSString *string) {
 
 - (void)fetchArtist:(NSString *)artistID completion:(void (^)(P7Artist *, NSError *))completion {
 	NSString *path = [NSString stringWithFormat:@"/api/artists/%@", P7Escape(artistID)];
-	[self GET:path parameters:nil completion:^(id json, NSError *error) {
+	[self GET:path parameters:nil remote:[self serverHandlesItem:artistID] completion:^(id json, NSError *error) {
 		completion(error ? nil : [P7Artist itemWithDictionary:json[@"artist"]], error);
 	}];
 }
 
 - (void)fetchCollection:(NSString *)collectionID completion:(void (^)(P7Playlist *, NSError *))completion {
 	NSString *path = [NSString stringWithFormat:@"/api/collections/%@", P7Escape(collectionID)];
-	[self GET:path parameters:nil completion:^(id json, NSError *error) {
+	[self GET:path parameters:nil remote:[self serverHandlesItem:collectionID] completion:^(id json, NSError *error) {
 		completion(error ? nil : [P7Playlist itemWithDictionary:json[@"playlist"]], error);
 	}];
 }
 
 - (void)fetchArtistsForTrack:(P7Track *)track completion:(void (^)(NSArray *, NSError *))completion {
 	NSString *path = [NSString stringWithFormat:@"/api/tracks/%@/artists", P7Escape(track.trackID)];
-	[self GET:path parameters:nil completion:^(id json, NSError *error) {
+	[self GET:path parameters:nil remote:[self serverHandlesItem:track.trackID] completion:^(id json, NSError *error) {
 		completion(error ? nil : [P7Entity itemsWithArray:json[@"artists"]], error);
 	}];
 }
@@ -220,18 +263,32 @@ static NSString *P7Escape(NSString *string) {
 }
 
 - (void)setTrack:(P7Track *)track inLibrary:(BOOL)inLibrary completion:(void (^)(NSError *))completion {
-	[self POST:@"/api/library" body:@{@"trackId": track.trackID ?: @"", @"remove": @(!inLibrary)} completion:^(id json, NSError *error) {
+	NSMutableDictionary *body = [@{@"trackId": track.trackID ?: @"", @"remove": @(!inLibrary)} mutableCopy];
+	// A YouTube song found on the phone: the server doesn't know its title yet.
+	NSDictionary *known = [self usesServer] ? [[P7LocalLibrary shared] trackForID:track.trackID] : nil;
+	if (known) body[@"track"] = known;
+	[self POST:@"/api/library" body:body completion:^(id json, NSError *error) {
+		if (!error && track.trackID) {
+			self->_inLibrary[track.trackID] = @(inLibrary);
+			[[NSNotificationCenter defaultCenter] postNotificationName:P7LibraryDidChangeNotification object:self];
+		}
 		if (completion) completion(error);
 	}];
 }
 
+- (BOOL)isTrackInLibrary:(P7Track *)track {
+	NSNumber *known = track.trackID ? _inLibrary[track.trackID] : nil;
+	return known ? known.boolValue : track.inLibrary;
+}
+
 - (void)prefetchTracks:(NSArray *)tracks {
-	NSMutableArray *ids = [NSMutableArray new];
+	NSMutableArray *remote = [NSMutableArray new];
+	NSMutableArray *local = [NSMutableArray new];
 	for (P7Track *track in tracks) {
-		if (track.trackID && !track.cached) [ids addObject:track.trackID];
+		if (track.trackID && !track.cached) [[self serverHandlesItem:track.trackID] ? remote : local addObject:track.trackID];
 	}
-	if (!ids.count) return;
-	[self POST:@"/api/prefetch" body:@{@"ids": ids} completion:^(id json, NSError *error) {}];
+	if (remote.count) [self POST:@"/api/prefetch" body:@{@"ids": remote} remote:YES completion:^(id json, NSError *error) {}];
+	if (local.count) [self POST:@"/api/prefetch" body:@{@"ids": local} remote:NO completion:^(id json, NSError *error) {}];
 }
 
 @end

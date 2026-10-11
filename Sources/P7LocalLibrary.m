@@ -96,6 +96,12 @@ static BOOL P7IsEmpty(id value) {
 	}
 }
 
+- (BOOL)knowsID:(NSString *)itemID {
+	@synchronized (self) {
+		return itemID && (_tracks[itemID] || _playlists[itemID] || _images[itemID]);
+	}
+}
+
 - (void)upsertTracks:(NSArray *)tracks {
 	@synchronized (self) {
 		for (NSDictionary *track in tracks) {

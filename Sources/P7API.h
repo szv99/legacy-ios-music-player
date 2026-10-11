@@ -7,7 +7,9 @@ extern NSString *const P7LibraryDidChangeNotification;   // a playlist / album /
 typedef void (^P7JSONCompletion)(id json, NSError *error);
 
 // Client for the Player7 server JSON API. With the "This iPhone" and Subsonic sources the same
-// API is answered by the app's own server on 127.0.0.1 (P7LocalServer).
+// API is answered by the app's own server on 127.0.0.1 (P7LocalServer), which also handles
+// YouTube for the Player7 server unless Settings say otherwise. Songs and pages go to whichever
+// server can answer for them (see -serverHandlesItem: in P7API.m).
 //   GET  /api/ping
 //   GET  /api/playlists                 -> { playlists: [Playlist] }
 //   GET  /api/playlists/<id>            -> { playlist: Playlist (with tracks) }
@@ -22,7 +24,7 @@ typedef void (^P7JSONCompletion)(id json, NSError *error);
 //   GET  /api/import/status             -> { running, message, done, total }
 //   POST /api/playlists/<id>/sync       -> { playlist }
 //   POST /api/playlists/<id>/delete
-//   POST /api/library { trackId, remove }
+//   POST /api/library { trackId, remove, track }   track: details of a YouTube song found on the phone
 //   POST /api/prefetch { ids }
 // Every request carries ?token=<token> when a token is configured.
 @interface P7API : NSObject
@@ -33,8 +35,11 @@ typedef void (^P7JSONCompletion)(id json, NSError *error);
 - (NSURL *)streamURLForTrack:(P7Track *)track;
 - (NSURL *)coverURLForTrackID:(NSString *)trackID size:(NSInteger)size;
 
+// To the selected source; remote: to the Player7 server instead of the app's own server.
 - (NSURLSessionDataTask *)GET:(NSString *)path parameters:(NSDictionary *)parameters completion:(P7JSONCompletion)completion;
+- (NSURLSessionDataTask *)GET:(NSString *)path parameters:(NSDictionary *)parameters remote:(BOOL)remote completion:(P7JSONCompletion)completion;
 - (NSURLSessionDataTask *)POST:(NSString *)path body:(NSDictionary *)body completion:(P7JSONCompletion)completion;
+- (NSURLSessionDataTask *)POST:(NSString *)path body:(NSDictionary *)body remote:(BOOL)remote completion:(P7JSONCompletion)completion;
 
 - (void)pingWithCompletion:(void (^)(NSError *error))completion;
 - (void)fetchPlaylistsWithCompletion:(void (^)(NSArray *playlists, NSError *error))completion;
@@ -51,6 +56,7 @@ typedef void (^P7JSONCompletion)(id json, NSError *error);
 - (void)syncPlaylist:(NSString *)playlistID completion:(void (^)(P7Playlist *playlist, NSError *error))completion;
 - (void)deletePlaylist:(NSString *)playlistID completion:(void (^)(NSError *error))completion;
 - (void)setTrack:(P7Track *)track inLibrary:(BOOL)inLibrary completion:(void (^)(NSError *error))completion;
+- (BOOL)isTrackInLibrary:(P7Track *)track;   // track.inLibrary, updated by the calls above
 - (void)prefetchTracks:(NSArray *)tracks;
 
 @end

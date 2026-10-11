@@ -59,6 +59,10 @@ Works with Navidrome, Airsonic, Gonic and other Subsonic-compatible servers. Ent
 
 The server in `server/` adds Spotify and SoundCloud search and imports, imports of whole Spotify profiles, your YouTube Music library, and Last.fm scrobbling. It runs on anything with Docker or Python, such as a Mac, a Linux machine, a Raspberry Pi or a NAS. See [Running the server](#running-the-server).
 
+YouTube is still searched and played by the phone itself, since YouTube often blocks servers, especially ones in data centers. To let the server handle YouTube with yt-dlp instead, turn on **YouTube via Server** in Settings.
+
+Songs play from wherever they came from, so you can switch sources without breaking the queue: Spotify and SoundCloud songs keep playing from the server after you switch to **This iPhone**, and Last.fm scrobbling keeps going through the server too.
+
 ## Running the server
 
 With Docker:
@@ -111,7 +115,7 @@ The YouTube code lives in `Resources/extractor.js` and runs in JavaScriptCore. S
 
 ## Troubleshooting
 
-**A song doesn't play with This iPhone.** YouTube probably changed something. An updated `extractor.js` usually fixes it, and the app downloads one automatically if your build has an update URL set. The Player7 server, which uses yt-dlp, is the most reliable alternative.
+**A YouTube song doesn't play.** YouTube probably changed something. An updated `extractor.js` usually fixes it, and the app downloads one automatically if your build has an update URL set. With a Player7 server, **YouTube via Server** plays YouTube through yt-dlp instead.
 
 **The app can't connect to a server.** Check that the phone and the server are on the same network, that the address includes the port, and that the token or password is correct.
 

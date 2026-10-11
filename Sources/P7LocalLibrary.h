@@ -15,6 +15,7 @@
 + (instancetype)shared;
 
 - (NSDictionary *)trackForID:(NSString *)trackID;
+- (BOOL)knowsID:(NSString *)itemID;         // a song, playlist or picture with this id was seen
 - (void)upsertTracks:(NSArray *)tracks;    // fields that are empty don't overwrite known ones
 
 - (NSArray *)playlists;                    // stored playlists, by name

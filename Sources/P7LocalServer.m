@@ -72,7 +72,9 @@ NSError *P7ProviderError(NSInteger status, NSString *message) {
 	return self;
 }
 
-- (id<P7Provider>)provider {
+// The selected source answers, except that YouTube items always go to the phone and Subsonic
+// items to Subsonic, so a queue keeps playing after switching sources (see P7API).
+- (id<P7Provider>)providerForItem:(NSString *)itemID {
 	static P7DeviceProvider *device;
 	static P7SubsonicProvider *subsonic;
 	static dispatch_once_t once;
@@ -80,6 +82,8 @@ NSError *P7ProviderError(NSInteger status, NSString *message) {
 		device = [P7DeviceProvider shared];
 		subsonic = [P7SubsonicProvider new];
 	});
+	if ([itemID hasPrefix:@"yt-"]) return device;
+	if ([itemID hasPrefix:@"ss-"]) return subsonic;
 	return [P7Settings shared].backend == P7BackendSubsonic ? subsonic : device;
 }
 
@@ -325,10 +329,6 @@ NSError *P7ProviderError(NSInteger status, NSString *message) {
 	NSMutableDictionary *query = [request.query mutableCopy];
 	[query removeObjectForKey:@"token"];
 
-	if ([P7Settings shared].backend == P7BackendServer) {
-		[self sendJSON:@{@"error": @"The app is set to use a Player7 server."} status:503 to:fd head:head];
-		return;
-	}
 	if (parts.count == 3 && [parts[0] isEqualToString:@"tracks"] && [parts[2] isEqualToString:@"stream"]) {
 		[self sendAudioForTrackID:parts[1] request:request to:fd];
 		return;
@@ -344,7 +344,8 @@ NSError *P7ProviderError(NSInteger status, NSString *message) {
 		if ([json isKindOfClass:[NSDictionary class]]) body = json;
 	}
 	NSError *error = nil;
-	id response = [self.provider responseForMethod:request.method parts:parts query:query body:body error:&error];
+	id<P7Provider> provider = [self providerForItem:parts.count > 1 ? parts[1] : nil];
+	id response = [provider responseForMethod:request.method parts:parts query:query body:body error:&error];
 	if (response) {
 		[self sendJSON:response status:200 to:fd head:head];
 	} else {
@@ -421,7 +422,7 @@ NSError *P7ProviderError(NSInteger status, NSString *message) {
 
 // Asks the provider for a fresh URL after the old one stopped working.
 - (NSURL *)renewAudioURLForTrackID:(NSString *)trackID headers:(NSDictionary **)headers {
-	id<P7Provider> provider = self.provider;
+	id<P7Provider> provider = [self providerForItem:trackID];
 	if (![provider respondsToSelector:@selector(audioURLFailedForTrackID:)]) return nil;
 	[provider audioURLFailedForTrackID:trackID];
 	return [provider audioURLForTrackID:trackID headers:headers error:NULL];
@@ -442,7 +443,7 @@ NSError *P7ProviderError(NSInteger status, NSString *message) {
 	BOOL head = [clientRequest.method isEqualToString:@"HEAD"];
 	NSDictionary *headers = nil;
 	NSError *error = nil;
-	NSURL *url = [self.provider audioURLForTrackID:trackID headers:&headers error:&error];
+	NSURL *url = [[self providerForItem:trackID] audioURLForTrackID:trackID headers:&headers error:&error];
 	if (!url) {
 		[self sendError:error ?: P7ProviderError(404, @"This song can't be played.") to:fd head:head];
 		return;
@@ -592,7 +593,7 @@ NSError *P7ProviderError(NSInteger status, NSString *message) {
 - (void)sendCoverForID:(NSString *)itemID size:(NSInteger)size wide:(BOOL)wide to:(int)fd head:(BOOL)head {
 	size = MAX(60, MIN(1200, size ?: 300));
 	NSError *error = nil;
-	NSURL *url = [self.provider imageURLForID:itemID size:size error:&error];
+	NSURL *url = [[self providerForItem:itemID] imageURLForID:itemID size:size error:&error];
 	NSHTTPURLResponse *response = nil;
 	NSData *data = url ? [P7HTTP GET:url response:&response error:NULL] : nil;
 	UIImage *image = data && response.statusCode == 200 ? [UIImage imageWithData:data] : nil;

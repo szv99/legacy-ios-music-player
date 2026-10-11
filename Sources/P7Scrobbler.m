@@ -76,15 +76,36 @@ static const NSUInteger kBatch = 50;
 
 - (void)setStatus:(NSDictionary *)status {
 	if (![status isKindOfClass:[NSDictionary class]]) return;
+	if (!status[@"for"]) {
+		NSMutableDictionary *tagged = [status mutableCopy];
+		tagged[@"for"] = [self destination];
+		status = tagged;
+	}
 	_status = status;
 	[[NSUserDefaults standardUserDefaults] setObject:status forKey:kStatusKey];
 	[self changed];
 	[self flush];
 }
 
+// Plays go to the Player7 server whenever one is set up, also while playing from This iPhone.
+// A Subsonic server takes its own plays (through the app's server).
+- (BOOL)viaServer {
+	P7Settings *settings = [P7Settings shared];
+	return settings.serverURL.length && settings.backend != P7BackendSubsonic;
+}
+
+// The server that keeps the Last.fm account; another server's status doesn't apply.
+- (NSString *)destination {
+	P7Settings *settings = [P7Settings shared];
+	if ([self viaServer]) return settings.serverURL;
+	return settings.backend == P7BackendSubsonic ? settings.subsonicURL ?: @"" : @"phone";
+}
+
 - (void)refreshStatus {
-	[[P7API shared] GET:@"/api/lastfm" parameters:nil completion:^(id json, NSError *error) {
-		if (!error) [self setStatus:json];
+	NSString *destination = [self destination];
+	if (_status[@"for"] && ![_status[@"for"] isEqual:destination]) [self setStatus:@{@"for": destination}];
+	[[P7API shared] GET:@"/api/lastfm" parameters:nil remote:[self viaServer] completion:^(id json, NSError *error) {
+		if (!error && [destination isEqual:[self destination]]) [self setStatus:json];
 	}];
 }
 
@@ -154,7 +175,7 @@ static const NSUInteger kBatch = 50;
 
 - (void)sendNowPlaying:(P7Track *)track {
 	if (![self active]) return;
-	[[P7API shared] POST:@"/api/lastfm/nowplaying" body:[self playForTrack:track duration:track.duration] completion:^(id json, NSError *error) {}];
+	[[P7API shared] POST:@"/api/lastfm/nowplaying" body:[self playForTrack:track duration:track.duration] remote:[self viaServer] completion:^(id json, NSError *error) {}];
 }
 
 #pragma mark - Queue
@@ -183,7 +204,7 @@ static const NSUInteger kBatch = 50;
 	if (_flushing || !_queue.count || ![self active]) return;
 	_flushing = YES;
 	NSArray *batch = [_queue subarrayWithRange:NSMakeRange(0, MIN(kBatch, _queue.count))];
-	[[P7API shared] POST:@"/api/lastfm/scrobble" body:@{@"scrobbles": batch} completion:^(id json, NSError *error) {
+	[[P7API shared] POST:@"/api/lastfm/scrobble" body:@{@"scrobbles": batch} remote:[self viaServer] completion:^(id json, NSError *error) {
 		self->_flushing = NO;
 		if (error) {
 			NSLog(@"[Player7] scrobbling failed, %lu waiting: %@", (unsigned long)self->_queue.count, error.localizedDescription);
@@ -200,7 +221,7 @@ static const NSUInteger kBatch = 50;
 #pragma mark - Account
 
 - (void)connectFrom:(UIViewController *)controller {
-	[[P7API shared] POST:@"/api/lastfm/connect" body:nil completion:^(id json, NSError *error) {
+	[[P7API shared] POST:@"/api/lastfm/connect" body:nil remote:[self viaServer] completion:^(id json, NSError *error) {
 		if (error) {
 			[P7Alert showError:error title:@"Couldn't Connect"];
 			return;
@@ -222,7 +243,7 @@ static const NSUInteger kBatch = 50;
 }
 
 - (void)finishConnecting {
-	[[P7API shared] POST:@"/api/lastfm/finish" body:nil completion:^(id json, NSError *error) {
+	[[P7API shared] POST:@"/api/lastfm/finish" body:nil remote:[self viaServer] completion:^(id json, NSError *error) {
 		if (error) {
 			[P7Alert confirmWithTitle:@"Not Connected Yet" message:error.localizedDescription confirm:@"Try Again" handler:^{
 				[self finishConnecting];
@@ -235,7 +256,7 @@ static const NSUInteger kBatch = 50;
 }
 
 - (void)disconnect {
-	[[P7API shared] POST:@"/api/lastfm/disconnect" body:nil completion:^(id json, NSError *error) {
+	[[P7API shared] POST:@"/api/lastfm/disconnect" body:nil remote:[self viaServer] completion:^(id json, NSError *error) {
 		if (error) {
 			[P7Alert showError:error title:@"Couldn't Disconnect"];
 			return;
@@ -249,7 +270,7 @@ static const NSUInteger kBatch = 50;
 - (void)loveTrack:(P7Track *)track {
 	NSMutableDictionary *body = [[self playForTrack:track duration:track.duration] mutableCopy];
 	body[@"loved"] = @YES;
-	[[P7API shared] POST:@"/api/lastfm/love" body:body completion:^(id json, NSError *error) {
+	[[P7API shared] POST:@"/api/lastfm/love" body:body remote:[self viaServer] completion:^(id json, NSError *error) {
 		if (error) [P7Alert showError:error title:@"Couldn't Love"];
 	}];
 }

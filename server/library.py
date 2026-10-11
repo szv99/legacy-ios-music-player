@@ -1227,6 +1227,20 @@ _AUDIO_LOCKS_GUARD = threading.Lock()
 _DOWNLOAD_SLOTS = threading.Semaphore(3)
 
 
+def remember_phone_track(track_id, track):
+    """Details of a YouTube song the app found by itself (it searches YouTube on the phone)."""
+    if not track_id.startswith("yt-") or not isinstance(track, dict):
+        return
+    fields = {k: track[k] for k in ("title", "artist", "album", "albumId") if isinstance(track.get(k), str)}
+    if isinstance(track.get("coverUrl"), str) and track["coverUrl"].startswith("https://"):
+        fields["coverUrl"] = track["coverUrl"]
+    if isinstance(track.get("duration"), (int, float)):
+        fields["duration"] = int(track["duration"])
+    if isinstance(track.get("artistRefs"), list):
+        fields["artistRefs"] = [r for r in track["artistRefs"] if isinstance(r, dict)]
+    STORE.upsert_tracks([{**fields, "id": track_id, "youtubeId": track_id[3:], "source": "youtube"}])
+
+
 def lookup_track(track_id):
     track = STORE.tracks.get(track_id)
     if track:

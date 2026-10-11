@@ -344,10 +344,9 @@ static NSString *const kCollectionPrefixes[] = {@"yt-pl-", @"yt-al-", @"yt-ch-"}
 		stream = _streams[trackID];
 	}
 	if (stream && [stream[@"expires"] doubleValue] > [[NSDate date] timeIntervalSince1970] + 300) return stream;
-	NSDictionary *track = [self lookupTrack:trackID error:error];
-	NSString *videoID = track ? [self videoIDForTrack:track trackID:trackID] : nil;
+	NSString *videoID = [self videoIDForTrack:[self.library trackForID:trackID] trackID:trackID];
 	if (!videoID) {
-		if (error && track) *error = P7ProviderError(404, @"This song needs the Player7 server it came from.");
+		if (error) *error = P7ProviderError(404, @"This song needs the Player7 server it came from.");
 		return nil;
 	}
 	NSDictionary *result = [self dictionary:[self script:@"stream" arguments:@[videoID] error:error]];

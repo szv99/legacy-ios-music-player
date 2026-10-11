@@ -19,6 +19,16 @@ static NSString *P7SearchSourceTitle(P7SearchSource source) {
 	return @[@"Spotify", @"YT Music", @"SoundCloud", @"Library", @"Server", @"YouTube"][source];
 }
 
+// The scope bar of a search bar (no public accessor).
+static UISegmentedControl *P7SegmentedControlIn(UIView *view) {
+	if ([view isKindOfClass:[UISegmentedControl class]]) return (UISegmentedControl *)view;
+	for (UIView *subview in view.subviews) {
+		UISegmentedControl *found = P7SegmentedControlIn(subview);
+		if (found) return found;
+	}
+	return nil;
+}
+
 static NSString *const kRecentSearchesKey = @"P7RecentSearches";
 static NSString *const kSelectedSourceKey = @"P7SearchSourceIndex";
 static NSString *const kEntityCell = @"P7EntityCell";
@@ -105,7 +115,7 @@ static NSString *const kEntityCell = @"P7EntityCell";
 	switch ([P7Settings shared].backend) {
 		case P7BackendDevice: _scopes = @[@(P7SearchSourceYouTube), @(P7SearchSourceYouTubeVideos), @(P7SearchSourceLibrary)]; break;
 		case P7BackendSubsonic: _scopes = @[@(P7SearchSourceSubsonic)]; break;
-		default: _scopes = @[@(P7SearchSourceSpotify), @(P7SearchSourceYouTube), @(P7SearchSourceSoundCloud), @(P7SearchSourceLibrary)]; break;
+		default: _scopes = @[@(P7SearchSourceSpotify), @(P7SearchSourceYouTube), @(P7SearchSourceYouTubeVideos), @(P7SearchSourceSoundCloud), @(P7SearchSourceLibrary)]; break;
 	}
 	NSMutableArray *titles = [NSMutableArray new];
 	for (NSNumber *source in _scopes) [titles addObject:P7SearchSourceTitle(source.integerValue)];
@@ -114,6 +124,8 @@ static NSString *const kEntityCell = @"P7EntityCell";
 	NSUInteger saved = [_scopes indexOfObject:@([[NSUserDefaults standardUserDefaults] integerForKey:kSelectedSourceKey])];
 	_searchBar.selectedScopeButtonIndex = saved == NSNotFound ? 0 : saved;
 	[_searchBar sizeToFit];
+	// Five equal segments cut "SoundCloud" off; sized to their titles they all fit.
+	P7SegmentedControlIn(_searchBar).apportionsSegmentWidthsByContent = _scopes.count > 4;
 	self.tableView.tableHeaderView = _searchBar;
 	[self updatePlaceholder];
 }
@@ -248,7 +260,7 @@ static NSString *const kEntityCell = @"P7EntityCell";
 	self.tableView.tableFooterView = (!recents && results.loading && ![results isEmpty]) ? _loadingFooter : [UIView new];
 
 	if (recents) {
-		NSString *hint = @[@"Search YouTube Music, YouTube videos or your own songs.", @"Search Spotify, YouTube Music, SoundCloud or your own songs.", @"Search the music on your server."][[P7Settings shared].backend];
+		NSString *hint = @[@"Search YouTube Music, YouTube videos or your own songs.", @"Search Spotify, YouTube Music, YouTube videos, SoundCloud or your own songs.", @"Search the music on your server."][[P7Settings shared].backend];
 		[self recentSearches].count ? [self hideMessage] : [self showMessage:[hint stringByAppendingString:@"\nTap a result to play it."] retry:NO];
 	} else if (results.loading && [results isEmpty]) {
 		[self showLoading];

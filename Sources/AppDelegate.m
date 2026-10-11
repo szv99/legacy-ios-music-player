@@ -40,7 +40,7 @@
 	} else if (settings.backend == P7BackendDevice && ![P7LocalLibrary shared].playlists.count) {
 		tabBar.selectedIndex = 2;   // a fresh install starts in Search
 	}
-	if (settings.backend == P7BackendDevice) [[P7Script shared] checkForUpdate];
+	if (settings.backend != P7BackendSubsonic) [[P7Script shared] checkForUpdate];
 
 	self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
 	self.window.tintColor = [P7Theme tintColor];

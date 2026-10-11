@@ -5,6 +5,7 @@ NSString *const P7SettingsDidChangeNotification = @"P7SettingsDidChangeNotificat
 
 static NSString *const kBackendKey = @"P7Backend";
 static NSString *const kServerURLKey = @"P7ServerURL";
+static NSString *const kYouTubeOnServerKey = @"P7YouTubeOnServer";
 static NSString *const kSubsonicURLKey = @"P7SubsonicURL";
 static NSString *const kSubsonicUsernameKey = @"P7SubsonicUsername";
 static NSString *const kSavePlayedSongsKey = @"P7SavePlayedSongs";
@@ -65,6 +66,16 @@ static NSString *const kSubsonicPasswordAccount = @"subsonic-password";
 
 - (void)setServerURL:(NSString *)serverURL {
 	[[NSUserDefaults standardUserDefaults] setObject:[P7Settings normalizedURL:serverURL] forKey:kServerURLKey];
+	[[NSUserDefaults standardUserDefaults] synchronize];
+	[self changed];
+}
+
+- (BOOL)youtubeOnServer {
+	return [[NSUserDefaults standardUserDefaults] boolForKey:kYouTubeOnServerKey];
+}
+
+- (void)setYoutubeOnServer:(BOOL)youtubeOnServer {
+	[[NSUserDefaults standardUserDefaults] setBool:youtubeOnServer forKey:kYouTubeOnServerKey];
 	[[NSUserDefaults standardUserDefaults] synchronize];
 	[self changed];
 }

@@ -19,7 +19,7 @@ Player7 app API (library.py), every call takes ?token= when a token is configure
   GET  /api/search?q=&source=spotify|youtube   -> {tracks: [...]}
   POST /api/import {url}                       -> {playlist} (profiles/YT Music library run in background)
   GET  /api/import/status
-  POST /api/library {trackId, remove?}         -> add/remove a song in "Songs"
+  POST /api/library {trackId, remove?, track?} -> add/remove a song in "Songs" (track: details of a YouTube song found on the phone)
   POST /api/prefetch {ids: [...]}              -> warm the audio cache
 """
 
@@ -357,6 +357,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True})
         if parts == ["library"]:
             track_id = body.get("trackId") or ""
+            lib.remember_phone_track(track_id, body.get("track"))
             lib.lookup_track(track_id)
             if body.get("remove"):
                 lib.STORE.remove_from_library(track_id)

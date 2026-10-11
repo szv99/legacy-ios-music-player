@@ -121,11 +121,16 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	return [P7Settings shared].backend;
 }
 
+// This iPhone scrobbles through a Player7 server when one is set up (see P7Scrobbler).
+- (BOOL)showsLastFM {
+	return [self backend] != P7BackendDevice || [P7Settings shared].serverURL.length > 0;
+}
+
 // Rows of the connection section, by backend.
 - (NSArray *)connectionRows {
 	switch ([self backend]) {
 		case P7BackendDevice: return @[@"extractor"];
-		case P7BackendServer: return @[@"server", @"token", @"test"];
+		case P7BackendServer: return @[@"server", @"token", @"test", @"youtube"];
 		case P7BackendSubsonic: return @[@"subsonic", @"username", @"password", @"test"];
 	}
 	return @[];
@@ -210,7 +215,7 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		case P7SettingsSectionSource: return 3;
 		case P7SettingsSectionConnection: return [self connectionRows].count;
 		case P7SettingsSectionLastFM:
-			if ([self backend] == P7BackendDevice) return 0;
+			if (![self showsLastFM]) return 0;
 			return [P7Scrobbler shared].connected ? 2 : 1;
 		case P7SettingsSectionCache: return [P7Settings shared].savePlayedSongs ? 1 : 4;
 		case P7SettingsSectionStorage: return [P7Downloads shared].activeDownloadCount ? 4 : 3;
@@ -222,7 +227,7 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	switch (section) {
 		case P7SettingsSectionSource: return @"Music Source";
 		case P7SettingsSectionConnection: return @[@"This iPhone", @"Player7 Server", @"Subsonic Server"][[self backend]];
-		case P7SettingsSectionLastFM: return [self backend] == P7BackendDevice ? nil : @"Last.fm";
+		case P7SettingsSectionLastFM: return [self showsLastFM] ? @"Last.fm" : nil;
 		case P7SettingsSectionCache: return @"Played Songs";
 		case P7SettingsSectionStorage: return @"Offline Storage";
 		default: return nil;
@@ -233,13 +238,13 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 	if (section == P7SettingsSectionConnection) {
 		switch ([self backend]) {
 			case P7BackendDevice: return @"Search and play YouTube Music right on this iPhone, no computer needed. Your playlists and songs are kept on the phone.";
-			case P7BackendServer: return @"The address of your Player7 server, for example the IP of the computer running it on your Wi-Fi. It adds Spotify and SoundCloud, imports and faster starts.";
+			case P7BackendServer: return @"The address of your Player7 server, for example the IP of the computer running it on your Wi-Fi. It adds Spotify, SoundCloud and imports. YouTube plays straight from this iPhone unless YouTube via Server is on.";
 			case P7BackendSubsonic: return @"Navidrome, Airsonic, Gonic or another Subsonic-compatible server. Songs it has in formats the iPhone can't play are converted to MP3 by the server.";
 		}
 	}
 	if (section == P7SettingsSectionLastFM) {
 		P7Scrobbler *scrobbler = [P7Scrobbler shared];
-		if ([self backend] == P7BackendDevice) return nil;
+		if (![self showsLastFM]) return nil;
 		if ([scrobbler.via isEqualToString:@"subsonic"]) return @"Plays are sent to your Subsonic server, which passes them on to Last.fm or ListenBrainz if it's set up to.";
 		if (!scrobbler.configured) return @"Add lastfm_api_key and lastfm_api_secret to the server's config.json to scrobble.";
 		if (!scrobbler.connected) return @"Scrobble the songs you play to your Last.fm profile.";
@@ -280,6 +285,12 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 		} else if ([row isEqualToString:@"password"]) {
 			cell.textLabel.text = @"Password";
 			cell.accessoryView = _passwordField;
+		} else if ([row isEqualToString:@"youtube"]) {
+			cell.textLabel.text = @"YouTube via Server";
+			UISwitch *toggle = [UISwitch new];
+			toggle.on = [P7Settings shared].youtubeOnServer;
+			[toggle addTarget:self action:@selector(youtubeOnServerChanged:) forControlEvents:UIControlEventValueChanged];
+			cell.accessoryView = toggle;
 		} else {
 			cell.textLabel.text = @"Test Connection";
 			cell.textLabel.textColor = [P7Theme tintColor];
@@ -414,6 +425,10 @@ typedef NS_ENUM(NSInteger, P7SettingsSection) {
 
 - (void)scrobbleChanged:(UISwitch *)toggle {
 	[P7Scrobbler shared].enabled = toggle.on;
+}
+
+- (void)youtubeOnServerChanged:(UISwitch *)toggle {
+	[P7Settings shared].youtubeOnServer = toggle.on;
 }
 
 - (void)savePlayedChanged:(UISwitch *)toggle {

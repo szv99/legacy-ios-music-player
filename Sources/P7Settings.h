@@ -14,6 +14,7 @@ typedef NS_ENUM(NSInteger, P7Backend) {
 @property (nonatomic) P7Backend backend;           // default: Device, or Server for setups from before backends existed
 @property (nonatomic, copy) NSString *serverURL;   // e.g. http://192.168.1.10:8787
 @property (nonatomic, copy) NSString *token;       // stored in the keychain
+@property (nonatomic) BOOL youtubeOnServer;        // the Player7 server searches and plays YouTube too (default: the phone does)
 @property (nonatomic, copy) NSString *subsonicURL; // e.g. http://192.168.1.10:4533
 @property (nonatomic, copy) NSString *subsonicUsername;
 @property (nonatomic, copy) NSString *subsonicPassword; // stored in the keychain
