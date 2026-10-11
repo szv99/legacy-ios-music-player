@@ -46,44 +46,26 @@ The app is called **Music** on the home screen and opens on the Search tab.
 
 ## Music sources
 
-Pick a source under **Settings > Music Source**.
+Pick one under **Settings > Music Source**.
 
-### This iPhone
+- **This iPhone** (default): YouTube Music and YouTube, nothing to set up. Import albums, playlists and channels with **+** on the Playlists tab.
+- **Subsonic Server**: Navidrome, Airsonic, Gonic and the like. Enter the address, username and password.
+- **Player7 Server**: adds Spotify and SoundCloud, plus imports of Spotify profiles and your YouTube Music library. YouTube still plays on the phone unless you turn on **YouTube via Server**.
 
-The default. It needs no setup. Use the **YT Music** tab to search songs and albums, and the **YouTube** tab to search videos, including long mixes and live recordings. To import an album, playlist or channel, tap **+** on the Playlists tab, choose **Import from Link**, and paste a YouTube or YouTube Music link.
-
-Age-restricted videos and videos made for kids can't be played, and live streams don't appear in search. Spotify and SoundCloud need the Player7 server.
-
-### Subsonic Server
-
-Works with Navidrome, Airsonic, Gonic and other Subsonic-compatible servers. Enter the server address (for example `http://192.168.1.20:4533`), your username and password, then tap **Test Connection**. Your playlists, starred albums and starred artists show up on the Playlists tab. **Add to Songs** stars a song on the server. Formats the iPhone can't play, such as FLAC, Ogg and Opus, are converted to MP3 by the server.
-
-### Player7 Server
-
-The server in `server/` adds Spotify and SoundCloud search and imports, imports of whole Spotify profiles and your YouTube Music library. It runs on anything with Docker or Python, such as a Mac, a Linux machine, a Raspberry Pi or a NAS. See [Running the server](#running-the-server).
-
-YouTube is still searched and played by the phone itself, since YouTube often blocks servers, especially ones in data centers. To let the server handle YouTube with yt-dlp instead, turn on **YouTube via Server** in Settings.
-
-Songs play from wherever they came from, so you can switch sources without breaking the queue: Spotify and SoundCloud songs keep playing from the server after you switch to **This iPhone**.
+Songs keep playing from where they came from, so switching sources doesn't break the queue.
 
 ## Last.fm and Discord
 
-Both run on the phone itself, so they work without a server.
-
-**Last.fm.** In Settings, tap **Connect to Last.fm** and log in with your Last.fm username and password, which are sent only to Last.fm. A song counts once you've heard half of it, or 4 minutes, and plays made offline are sent later. This works the same with every music source.
-
-**Discord.** In Settings, tap **Connect Discord**. Scan the QR code with your main phone, or go to discord.com/activate and type the code, then approve. Your Discord profile then shows the song you're playing, and the status goes away when you pause.
+Both run on the phone, with any music source. In Settings, tap **Connect to Last.fm** and log in, or tap **Connect Discord** and scan the QR code with your main phone.
 
 ## Running the server
-
-With Docker:
 
 ```sh
 cd server
 docker compose up -d
 ```
 
-Without Docker, you need Python 3.10 or later and ffmpeg. [Deno](https://deno.com) is recommended, because yt-dlp needs it for some YouTube videos.
+Or without Docker (Python 3.10+, ffmpeg, and [Deno](https://deno.com) for yt-dlp):
 
 ```sh
 cd server
@@ -91,68 +73,38 @@ cd server
 python3 server.py
 ```
 
-On startup the server prints its address, for example `http://192.168.1.20:8787`. In the app, choose **Player7 Server**, enter that address and tap **Test Connection**.
-
-### Configuration
-
-All settings are optional. Set them as environment variables (for example in `docker-compose.yml`) or in `server/config.json`; `config.example.json` is a starting point. Values in `config.json` take precedence.
+It prints its address on startup; enter it in the app under **Player7 Server**. Settings go in `docker-compose.yml` or `server/config.json` (see `config.example.json`):
 
 | config.json | Environment variable | Purpose |
 |---|---|---|
-| `token` | `PLAYER7_TOKEN` | Token the app must send. Enter the same token in the app's Settings. Set one if anyone else can reach the server. |
-| `spotify_client_id`, `spotify_client_secret` | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Spotify search and artist pages. Create an app at <https://developer.spotify.com/dashboard>. Importing Spotify playlists and albums works without them. |
-| `spotify_market` | `SPOTIFY_MARKET` | Two-letter country code used for Spotify availability. Defaults to `US`. |
-| `youtube_proxy` | `YOUTUBE_PROXY` | Proxy for yt-dlp, if YouTube blocks the server's IP address. This happens more often on cloud servers than on home connections. |
-| | `PORT` | Port to listen on. Defaults to `8787`. |
+| `token` | `PLAYER7_TOKEN` | Token the app must send. Set one if anyone else can reach the server. |
+| `spotify_client_id`, `spotify_client_secret` | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Spotify search and artist pages ([create an app](https://developer.spotify.com/dashboard)). |
+| `spotify_market` | `SPOTIFY_MARKET` | Country for Spotify availability. Defaults to `US`. |
+| `youtube_proxy` | `YOUTUBE_PROXY` | Proxy for yt-dlp if YouTube blocks the server. |
+| | `PORT` | Defaults to `8787`. |
 
-To import your YouTube Music library (liked songs and private playlists), run `.venv/bin/ytmusicapi browser`, follow its instructions, and save the output as `server/secrets/ytmusic_browser.json`. Then import `ytmusic` from the app.
+For your YouTube Music library, save the output of `.venv/bin/ytmusicapi browser` as `server/secrets/ytmusic_browser.json`. For audio straight from Spotify (Premium), run `.venv/bin/pip install -r requirements-spotify.txt` and `.venv/bin/python spotify_dl.py login`.
 
-To download audio from Spotify instead of matching songs on YouTube (Spotify Premium required), run `.venv/bin/pip install -r requirements-spotify.txt` and then `.venv/bin/python spotify_dl.py login`. Check Spotify's terms of service first.
-
-### Security
-
-The server speaks plain HTTP, so traffic between it and the app isn't encrypted. Keep the server on your local network, set a token, and don't expose its port to the internet. To use it away from home, connect through a VPN; iOS 7 includes L2TP and IPSec clients.
-
-## How it works
-
-iOS 7 trusts only the root certificates it shipped with in 2014, so it rejects many sites today. Player7 bundles the current Mozilla root certificates (`Resources/cacert.pem`) and checks connections against them when the system check fails.
-
-The app runs a small HTTP server on `127.0.0.1` that implements the same API as the Player7 server, so the rest of the app works the same way with every source. It also relays HTTPS audio, so the player only receives plain HTTP from the phone itself.
-
-YouTube serves audio as fragmented MP4, which the media player on iOS 7 to 9 can't open. The built-in server rebuilds the file's index and passes the player a regular MP4. The audio data is copied unchanged, without re-encoding, and seeking and downloads work as usual.
-
-Last.fm and Discord are contacted straight from the phone. discord.com only accepts encryption that iOS 7 doesn't support, so Player7 talks to gaming-sdk.com, the address Discord's Social SDK uses for game consoles, which still does.
-
-The YouTube code lives in `Resources/extractor.js` and runs in JavaScriptCore. Since YouTube changes often, the app can download a newer version of this file without being reinstalled (see [Building](#building)).
-
-## Troubleshooting
-
-**A YouTube song doesn't play.** YouTube probably changed something. An updated `extractor.js` usually fixes it, and the app downloads one automatically if your build has an update URL set. With a Player7 server, **YouTube via Server** plays YouTube through yt-dlp instead.
-
-**The app can't connect to a server.** Check that the phone and the server are on the same network, that the address includes the port, and that the token or password is correct.
+The server speaks plain HTTP: keep it on your home network or behind a VPN.
 
 ## Building
 
-You need [Theos](https://theos.dev) with the iOS 9.3 SDK in `$THEOS/sdks`.
+You need [Theos](https://theos.dev) with the iOS 9.3 SDK.
 
 ```sh
 make                          # debug build
-./dev.sh ipa                  # release .ipa in packages/
-make package FINALPACKAGE=1   # release .deb in packages/
+make package FINALPACKAGE=1   # release .deb
+./dev.sh ipa                  # release .ipa
 ```
 
-`dev.sh` also builds, installs and shows logs for a phone connected over USB. Debug builds accept `player7://` URLs for scripted testing (see `Sources/P7Debug.h`); release builds ignore them.
-
-Scrobbling needs a Last.fm API key in the build. Create one at <https://www.last.fm/api/account/create> and put it in `local.mk`, which isn't committed:
+Scrobbling needs a [Last.fm API key](https://www.last.fm/api/account/create) in `local.mk`, which isn't committed:
 
 ```make
 LASTFM_API_KEY = your-api-key
 LASTFM_API_SECRET = your-shared-secret
 ```
 
-The Discord status uses the Discord application set in `kP7DiscordApplicationID` in `Sources/P7Discord.m`. Forks should create their own at <https://discord.com/developers/applications>, turn on **Public Client** under OAuth2 and enable the Social SDK.
-
-Before publishing a build, set `kP7ExtractorUpdateURL` in `Sources/P7Script.m` to the raw URL of `Resources/extractor.js` in your repository. To ship a fix later, edit `extractor.js`, increase `extractor.version`, and push. Installed apps check for a new version once a day.
+Forks should also set their own Discord application in `Sources/P7Discord.m` and the extractor update URL in `Sources/P7Script.m`.
 
 ## License
 
