@@ -1,6 +1,6 @@
 Package: com.szv.player7
 Name: Player7
-Version: 0.1.0
+Version: 0.2.0
 Architecture: iphoneos-arm
 Description: iOS 7 style music player for old iPhones. Plays YouTube Music and YouTube right on the phone, or your own Subsonic (Navidrome) or Player7 server, with offline downloads.
 Depends: firmware (>= 7.1)
